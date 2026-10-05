@@ -10,6 +10,12 @@ from langfuse_to_snowflake.config import (
     SyncSettings,
 )
 
+# On a CI runner (GITHUB_ACTIONS, FORCE_COLOR) Typer styles its help and error
+# output for a terminal, which puts escape codes between the words the tests
+# look for. Typer reads this once, when it is first imported, so it is set
+# here rather than in a fixture.
+os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
+
 
 @pytest.fixture(autouse=True)
 def _clean_environment(monkeypatch, tmp_path):

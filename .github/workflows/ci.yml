@@ -34,7 +34,17 @@ jobs:
       # Needs no credentials: Langfuse is faked, and the Snowflake adapter runs on
       # Snowpark's local emulator.
       - name: Unit tests
-        run: pytest
+        run: |
+          set -o pipefail
+          pytest -rfE | tee pytest.log
+      # Puts each failed test on the run's summary page, so that what broke
+      # can be seen without opening the log.
+      - name: Name the failed tests
+        if: failure()
+        run: |
+          if [ -f pytest.log ]; then
+            grep -E '^(FAILED|ERROR) ' pytest.log | cut -c1-300 | sed 's/^/::error title=Test failed::/' || true
+          fi
 
   image:
     name: Container image
