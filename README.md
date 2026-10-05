@@ -491,6 +491,10 @@ self-hosted v4 already returns 404.
 | Sessions | View grouping observations by session | `GET /api/public/sessions` |
 | Comments, annotation queues, queue items | `GET /api/public/comments`, `/annotation-queues`, `/annotation-queues/{id}/items` | The same |
 
+On Langfuse Cloud, organisations created on or after September 16, 2026 have
+no access to the legacy endpoints at all: they answer `410`, so `v3` is only
+for older organisations and self-hosted v3.
+
 The observations and scores tables have the same columns under both versions,
 so they keep filling after an upgrade. Things to know when moving from v3 to v4:
 
@@ -563,10 +567,32 @@ Dockerfile, docker-compose.yml
 Each folder's `__init__.py` re-exports its public names, so imports read
 `from langfuse_to_snowflake.snowflake import SnowflakeAdapter`.
 
-## Development
+## Testing
 
 ```bash
 pytest
 ```
 
-The tests run against fakes of the Langfuse API and the Snowflake connection.
+runs the unit tests against fakes of the Langfuse API and the Snowflake
+connection. They need no credentials and no network.
+
+```bash
+pytest -m live
+```
+
+runs the live tests: they read a real Langfuse project to prove that the API
+still accepts what the client sends (paths, parameters, field groups, the
+filters sent along, the lighter requests used for reconciling). They only
+read. The keys come from the environment or from `.env`; without any, the
+tests are skipped. They never run unless asked for.
+
+### On GitHub
+
+| Workflow | When | What it does |
+| --- | --- | --- |
+| `CI` | every push and pull request | Lint, the unit tests on Python 3.11 and 3.12, and a build of the container image that is then started to check it refuses to run without an access key, serves the web app and reads keys from secret files. Needs no secrets. |
+| `Live tests` | pushes to `main`, weekly, and on demand | The live tests against the Langfuse test project. |
+
+The live workflow needs three repository secrets (Settings, Secrets and
+variables, Actions): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
+`LANGFUSE_BASE_URL`.
