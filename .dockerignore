@@ -1,0 +1,8 @@
+# Everything is excluded unless listed below, so that secrets and local state
+# can never end up in an image by accident.
+*
+!pyproject.toml
+!README.md
+!src
+**/__pycache__
+**/*.py[cod]

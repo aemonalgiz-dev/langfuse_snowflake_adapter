@@ -1,0 +1,19 @@
+.venv/
+.idea/
+.claude/settings.local.json
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets
+.env
+*.p8
+*.pem
+secrets/
+
+# Settings saved from the web app when running locally
+config.json

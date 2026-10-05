@@ -1,0 +1,3 @@
+# Keep line endings as LF everywhere, so that the Dockerfile and the files it
+# copies are the same on Windows as on the Linux runners.
+* text=auto eol=lf

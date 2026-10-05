@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Langfuse to Snowflake</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-inner">
+      <div>
+        <h1>Langfuse to Snowflake</h1>
+        <p id="deployment" class="muted">Loading&hellip;</p>
+      </div>
+      <div class="top-tools">
+        <label id="project-picker" class="inline" hidden>
+          Project
+          <select id="project"></select>
+        </label>
+        <button type="button" id="forget-key" class="link" hidden>Forget access key</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <form id="key-form" class="card key" hidden>
+      <h2>Access key needed</h2>
+      <p class="muted">Enter the access key engineering gave you for this service. It is kept for this browser tab only.</p>
+      <div class="row">
+        <label class="grow">
+          <span class="sr">Access key</span>
+          <input type="password" id="key-input" autocomplete="off" placeholder="Access key" required>
+        </label>
+        <button type="submit">Unlock</button>
+      </div>
+      <p id="key-error" class="error" role="alert" hidden></p>
+    </form>
+
+    <div id="app" hidden>
+      <p id="notice" class="notice" role="status" hidden></p>
+
+      <section class="card" aria-labelledby="status-title">
+        <div class="card-head">
+          <h2 id="status-title">Status</h2>
+          <div class="actions">
+            <button type="button" id="sync-now">Sync now</button>
+            <button type="button" id="reconcile-now" class="secondary">Reconcile now</button>
+          </div>
+        </div>
+        <p id="schedule-line" class="muted"></p>
+        <p id="action-message" class="muted" role="status"></p>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Snowflake object</th>
+                <th scope="col">Type</th>
+                <th scope="col">Synced up to</th>
+                <th scope="col">Last reconciled</th>
+              </tr>
+            </thead>
+            <tbody id="state-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <form class="card" id="config-form" novalidate aria-labelledby="config-title">
+        <div class="card-head">
+          <h2 id="config-title">What gets synced</h2>
+          <p class="muted">Changes apply from the next run.</p>
+        </div>
+        <p id="persist-warning" class="notice" hidden>
+          No <code>SYNC_CONFIG_FILE</code> is set, so changes made here last only until the service restarts.
+        </p>
+        <p class="error" data-error="" role="alert" hidden></p>
+
+        <fieldset>
+          <legend>Entities <span class="tag" data-changed="entities" hidden>changed</span></legend>
+          <div id="entities" class="checks"></div>
+          <p class="error" data-error="entities" role="alert" hidden></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Filters <span class="tag" data-changed="filters" hidden>changed</span></legend>
+          <p class="hint">Only records that match every filter are loaded. Field names are Langfuse's, such as <code>environment</code>, <code>userId</code> or <code>metadata.tier</code>. Several values separated by commas mean any of them.</p>
+          <div id="filters"></div>
+          <button type="button" id="add-filter" class="secondary">Add filter</button>
+          <p class="error" data-error="filters" role="alert" hidden></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Fields to leave out <span class="tag" data-changed="exclude_fields" hidden>changed</span></legend>
+          <p class="hint">A field listed here is removed from every record before it is loaded, so it never reaches Snowflake. Use a dotted name for one key inside a field, such as <code>metadata.email</code>. Filters still see the field.</p>
+          <div id="exclusions"></div>
+          <div class="row wrap">
+            <button type="button" id="add-exclusion" class="secondary">Add field</button>
+            <button type="button" id="look" class="secondary">Look at recent data</button>
+            <span id="look-message" class="muted" role="status"></span>
+          </div>
+          <p class="error" data-error="exclude_fields" role="alert" hidden></p>
+          <div id="schema"></div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Sampling <span class="tag" data-changed="sample_rate" hidden>changed</span></legend>
+          <label class="inline">
+            Load
+            <input type="number" id="sample-rate" min="0.01" max="100" step="any" inputmode="decimal">
+            % of traces
+          </label>
+          <p class="hint">A trace is kept or dropped as a whole, with its observations, scores and comments, and the same traces are chosen on every run. Totals in Snowflake then cover the sample only.</p>
+          <p class="error" data-error="sample_rate" role="alert" hidden></p>
+        </fieldset>
+
+        <fieldset id="content-section">
+          <legend>Observation content <span class="tag" data-changed="observation_fields" hidden>changed</span></legend>
+          <p class="hint">Untick a group to keep it out of Snowflake. Leaving out inputs and outputs keeps prompts and completions in Langfuse only.</p>
+          <div id="observation-fields" class="checks"></div>
+          <p class="error" data-error="observation_fields" role="alert" hidden></p>
+          <label class="stack">
+            <span>Metadata keys to keep in full <span class="tag" data-changed="expand_metadata" hidden>changed</span></span>
+            <input type="text" id="expand-metadata" placeholder="customer, ticket_id">
+          </label>
+          <p class="hint">Langfuse shortens metadata values over 200 characters unless the key is listed here.</p>
+          <p class="error" data-error="expand_metadata" role="alert" hidden></p>
+        </fieldset>
+
+        <fieldset>
+          <legend>Freshness</legend>
+          <div class="grid">
+            <label class="stack">
+              <span>Sync every <span class="tag" data-changed="schedule_minutes" hidden>changed</span></span>
+              <span class="unit"><input type="number" id="schedule-minutes" min="0" step="1"> minutes</span>
+              <span class="hint">0 leaves syncing to "Sync now" or an outside scheduler.</span>
+              <span class="error" data-error="schedule_minutes" role="alert" hidden></span>
+            </label>
+            <label class="stack">
+              <span>Re-check loaded data every <span class="tag" data-changed="reconcile_every_hours" hidden>changed</span></span>
+              <span class="unit"><input type="number" id="reconcile-every-hours" min="0" step="1"> hours</span>
+              <span class="hint">Picks up scores edited after loading, late records and deletions. 0 turns it off.</span>
+              <span class="error" data-error="reconcile_every_hours" role="alert" hidden></span>
+            </label>
+            <label class="stack">
+              <span>Re-check the last <span class="tag" data-changed="reconcile_days" hidden>changed</span></span>
+              <span class="unit"><input type="number" id="reconcile-days" min="1" step="1"> days</span>
+              <span class="hint">Edits to older records are not picked up.</span>
+              <span class="error" data-error="reconcile_days" role="alert" hidden></span>
+            </label>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="check-deletions">
+            <span>Report records deleted in Langfuse <span class="tag" data-changed="check_deletions" hidden>changed</span>
+              <span class="hint">They are counted and logged, never removed from Snowflake.</span>
+              <span class="error" data-error="check_deletions" role="alert" hidden></span></span>
+          </label>
+          <label class="check">
+            <input type="checkbox" id="reconcile-full">
+            <span>Compare observations by content, not only by change time <span class="tag" data-changed="reconcile_full" hidden>changed</span>
+              <span class="hint">More thorough, but downloads every observation in the window each time.</span>
+              <span class="error" data-error="reconcile_full" role="alert" hidden></span></span>
+          </label>
+        </fieldset>
+
+        <details>
+          <summary>Advanced</summary>
+          <div class="grid">
+            <label class="stack">
+              <span>First sync goes back <span class="tag" data-changed="initial_backfill_days" hidden>changed</span></span>
+              <span class="unit"><input type="number" id="initial-backfill-days" min="1" step="1"> days</span>
+              <span class="error" data-error="initial_backfill_days" role="alert" hidden></span>
+            </label>
+            <label class="stack">
+              <span>Each sync re-reads the last <span class="tag" data-changed="lookback_minutes" hidden>changed</span></span>
+              <span class="unit"><input type="number" id="lookback-minutes" min="0" step="1"> minutes</span>
+              <span class="hint">Covers records that finish or arrive late.</span>
+              <span class="error" data-error="lookback_minutes" role="alert" hidden></span>
+            </label>
+            <label class="stack">
+              <span>Progress is saved every <span class="tag" data-changed="window_hours" hidden>changed</span></span>
+              <span class="unit"><input type="number" id="window-hours" min="1" step="1"> hours of data</span>
+              <span class="error" data-error="window_hours" role="alert" hidden></span>
+            </label>
+          </div>
+        </details>
+
+        <div class="form-foot">
+          <button type="submit" id="save">Save changes</button>
+          <button type="button" id="reset" class="secondary">Reset to defaults</button>
+          <span id="save-message" class="muted" role="status"></span>
+        </div>
+      </form>
+
+      <section class="card" aria-labelledby="runs-title">
+        <div class="card-head">
+          <h2 id="runs-title">Recent runs</h2>
+          <p class="muted">Kept until the service restarts.</p>
+        </div>
+        <div class="scroll">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Started</th>
+                <th scope="col">Run</th>
+                <th scope="col">Result</th>
+                <th scope="col">Details</th>
+              </tr>
+            </thead>
+            <tbody id="run-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="deployment-title">
+        <div class="card-head">
+          <h2 id="deployment-title">Deployment</h2>
+          <p class="muted">Set by engineering in the environment; not editable here.</p>
+        </div>
+        <dl id="deployment-list" class="facts"></dl>
+      </section>
+    </div>
+  </main>
+
+  <script src="/ui/app.js" defer></script>
+</body>
+</html>

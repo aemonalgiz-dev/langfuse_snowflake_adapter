@@ -1,0 +1,65 @@
+# An example deployment. Engineering supplies two kinds of things at start:
+#
+#   - which Langfuse projects to sync and where to connect, as environment
+#     variables (not secret)
+#   - the keys, as secrets, which Docker mounts as files under /run/secrets
+#
+# Each secret file is named after its setting in lower case. The same works on
+# Kubernetes by mounting a Secret at /run/secrets, and any orchestrator can
+# instead inject the keys as environment variables (LANGFUSE_SUPPORT_SECRET_KEY, ...).
+#
+# Nobody types a key into the web app except its own access key, sync_api_key,
+# which engineering hands to the data team. What the data team then sets up per
+# project (filters, sampling, fields to leave out) is kept in the config volume.
+
+services:
+  langfuse-to-snowflake:
+    build: .
+    image: langfuse-to-snowflake:latest
+    restart: unless-stopped
+    environment:
+      # One name per Langfuse project; each needs its own key pair below.
+      # For a single project, drop this line and name the secrets
+      # langfuse_public_key and langfuse_secret_key.
+      LANGFUSE_PROJECTS: support,search
+      LANGFUSE_HOST: https://cloud.langfuse.com
+      LANGFUSE_API_VERSION: v4
+      SNOWFLAKE_ACCOUNT: myorg-myaccount
+      SNOWFLAKE_USER: LANGFUSE_LOADER
+      SNOWFLAKE_ROLE: LANGFUSE_LOADER
+      SNOWFLAKE_WAREHOUSE: LOADING_WH
+      SNOWFLAKE_DATABASE: ANALYTICS
+      SNOWFLAKE_SCHEMA: LANGFUSE
+    secrets:
+      - langfuse_support_public_key
+      - langfuse_support_secret_key
+      - langfuse_search_public_key
+      - langfuse_search_secret_key
+      - snowflake_private_key
+      - sync_api_key
+    ports:
+      # Published on this machine only. Put a TLS-terminating proxy in front
+      # before exposing it further: the access key travels in a request header.
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - config:/data
+
+secrets:
+  # One value per file. On Linux they must be readable by the container's
+  # user (uid 10001). The ./secrets folder is ignored by git.
+  langfuse_support_public_key:
+    file: ./secrets/langfuse_support_public_key
+  langfuse_support_secret_key:
+    file: ./secrets/langfuse_support_secret_key
+  langfuse_search_public_key:
+    file: ./secrets/langfuse_search_public_key
+  langfuse_search_secret_key:
+    file: ./secrets/langfuse_search_secret_key
+  snowflake_private_key:
+    # The PEM file itself (rsa_key.p8).
+    file: ./secrets/snowflake_private_key
+  sync_api_key:
+    file: ./secrets/sync_api_key
+
+volumes:
+  config:
