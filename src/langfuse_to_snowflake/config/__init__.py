@@ -10,7 +10,13 @@ from .settings import (
     SyncSettings,
     load_projects,
 )
-from .store import ConfigFile, ConfigStore, Deployment
+from .store import (
+    ConfigFile,
+    ConfigStore,
+    Deployment,
+    SettingsStorage,
+    SettingsUnavailable,
+)
 
 __all__ = [
     "DEFAULT_PROJECT",
@@ -21,6 +27,8 @@ __all__ = [
     "Deployment",
     "LangfuseSettings",
     "Settings",
+    "SettingsStorage",
+    "SettingsUnavailable",
     "SnowflakeSettings",
     "SyncSettings",
     "load_projects",

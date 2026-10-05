@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Annotated, TypeVar
+from typing import Annotated, Literal, TypeVar
 
 from pydantic import (
     BaseModel,
@@ -210,8 +210,13 @@ class SyncSettings(BaseSettings):
     lookback_minutes: int = Field(default=180, ge=0)
     initial_backfill_days: int = Field(default=30, ge=1)
     window_hours: int = Field(default=24, ge=1)
+    # Records are sent to Snowflake in batches of at most this many rows and
+    # about this many bytes. A batch is held in memory while it is sent.
     batch_max_rows: int = Field(default=20_000, ge=1)
-    batch_max_bytes: int = Field(default=100 * 1024 * 1024, ge=1)
+    batch_max_bytes: int = Field(default=32 * 1024 * 1024, ge=1)
+    # A record larger than this is not loaded but counted as rejected. 16 MB is
+    # what a Snowflake row can hold unless the account has been given more.
+    record_max_bytes: int = Field(default=16 * 1024 * 1024, ge=1)
     # Share of traces to keep, chosen by a hash of the trace ID.
     sample_rate: float = Field(default=1.0, gt=0, le=1)
     # Semicolon-separated, e.g. environment=production;observations:level!=DEBUG
@@ -231,8 +236,13 @@ class SyncSettings(BaseSettings):
     check_deletions: bool = True
     # The HTTP service starts a sync by itself this often, in minutes. 0 turns that off.
     schedule_minutes: int = Field(default=0, ge=0)
-    # Where settings changed through the web app are kept. Without a file they
-    # only last until the service restarts.
+    # Where the service keeps what it has to remember: the settings changed
+    # through the web app, and the history of runs. "snowflake" keeps both in
+    # tables next to the data, so that the service itself holds nothing.
+    # "file" keeps the settings in SYNC_CONFIG_FILE and no run history.
+    store: Literal["snowflake", "file"] = "snowflake"
+    # Only with SYNC_STORE=file. Without a file, changed settings last until
+    # the service restarts.
     config_file: Path | None = None
 
     @field_validator("entities", "exclude_fields", mode="before")
@@ -271,6 +281,15 @@ class SyncSettings(BaseSettings):
     @classmethod
     def _valid_prefix(cls, value: str) -> str:
         return validate_prefix(value)
+
+    @model_validator(mode="after")
+    def _one_store(self) -> SyncSettings:
+        if self.config_file is not None and self.store != "file":
+            raise ValueError(
+                "SYNC_CONFIG_FILE is only used with SYNC_STORE=file; "
+                "set that, or remove the file to keep settings in Snowflake"
+            )
+        return self
 
 
 class ApiSettings(BaseSettings):

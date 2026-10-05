@@ -8,9 +8,9 @@ from datetime import UTC, datetime
 
 import typer
 
-from ..config import ConfigError, ConfigStore, Deployment
+from ..config import ConfigError, ConfigStore, Deployment, Settings, SettingsUnavailable
 from ..selection import parse_filter
-from ..sync import SyncResult, SyncService, open_service
+from ..sync import Runtime, SyncResult, SyncService, open_runtime, open_service
 
 
 def fail(message: str, code: int = 1) -> typer.Exit:
@@ -18,12 +18,33 @@ def fail(message: str, code: int = 1) -> typer.Exit:
     return typer.Exit(code)
 
 
-def open_deployment(ctx: typer.Context) -> Deployment:
-    """Every project the environment declares, with what was changed for it in the web app."""
+def environment(ctx: typer.Context) -> dict[str, Settings]:
+    """Every project's settings as the environment gives them, without reaching Snowflake."""
     try:
-        return Deployment.open(ctx.obj["env_file"])
+        return Settings.load_all(ctx.obj["env_file"])
     except ConfigError as exc:
         raise fail(str(exc), code=2) from exc
+
+
+def runtime(ctx: typer.Context) -> Runtime:
+    """Every project the environment declares, with what was changed for it in the web app.
+
+    Opened once per command. With SYNC_STORE=snowflake this reads the saved
+    settings from Snowflake; if they cannot be read the command stops, so
+    that nothing is synced with settings that may no longer hold.
+    """
+    if "runtime" not in ctx.obj:
+        try:
+            ctx.obj["runtime"] = open_runtime(ctx.obj["env_file"])
+        except SettingsUnavailable as exc:
+            raise fail(f"{exc}\nNothing was synced.", code=1) from exc
+        except ConfigError as exc:
+            raise fail(str(exc), code=2) from exc
+    return ctx.obj["runtime"]
+
+
+def open_deployment(ctx: typer.Context) -> Deployment:
+    return runtime(ctx).deployment
 
 
 def projects(ctx: typer.Context) -> list[ConfigStore]:
@@ -49,7 +70,7 @@ def service(ctx: typer.Context, store: ConfigStore) -> Iterator[SyncService]:
     if ctx.obj.get("label") and not ctx.obj.get("json"):
         typer.secho(f"[{store.project}]", bold=True)
     try:
-        with open_service(store.current()) as opened:
+        with open_service(store.current(), runtime(ctx).sessions) as opened:
             yield opened
     except typer.Exit:
         raise

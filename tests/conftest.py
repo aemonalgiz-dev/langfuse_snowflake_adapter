@@ -52,3 +52,33 @@ def settings(langfuse_settings, snowflake_settings) -> Settings:
         sync=SyncSettings(_env_file=None),
         api=ApiSettings(_env_file=None),
     )
+
+
+@pytest.fixture
+def local_session():
+    """A Snowpark session on the local emulator: in-process, empty, and gone afterwards."""
+    from snowflake.snowpark import Session
+
+    session = Session.builder.config("local_testing", True).create()
+    yield session
+    session.close()
+
+
+@pytest.fixture
+def local_catalog(local_session):
+    from tests.fakes import LocalCatalog
+
+    return LocalCatalog(local_session)
+
+
+@pytest.fixture
+def local_sessions(local_session, local_catalog, snowflake_settings):
+    """What the adapter and the service's own tables open sessions with, on the emulator."""
+    from langfuse_to_snowflake.snowflake import Sessions
+
+    return Sessions(
+        snowflake_settings,
+        session=local_session,
+        catalog=lambda _: local_catalog,
+        sleep=lambda _: None,
+    )

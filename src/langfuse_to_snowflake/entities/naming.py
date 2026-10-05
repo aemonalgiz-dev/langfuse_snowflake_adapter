@@ -8,7 +8,7 @@ _IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_$]*$")
 
 
 def validate_prefix(prefix: str) -> str:
-    """Prefixes are interpolated into SQL, so only plain identifiers are allowed."""
+    """Prefixes become part of object names, so only plain identifiers are allowed."""
     if prefix and not _IDENTIFIER.match(prefix):
         raise ValueError(
             f"table prefix {prefix!r} must be empty or contain only letters, digits, _ and $, "
@@ -21,9 +21,13 @@ def table_name(prefix: str, entity: str) -> str:
     return f"{prefix}{entity}".upper()
 
 
-def load_table_name(prefix: str, entity: str) -> str:
-    return f"{table_name(prefix, entity)}__LOAD"
-
-
 def state_table_name(prefix: str) -> str:
     return f"{prefix}SYNC_STATE".upper()
+
+
+def settings_table_name(prefix: str) -> str:
+    return f"{prefix}SYNC_SETTINGS".upper()
+
+
+def runs_table_name(prefix: str) -> str:
+    return f"{prefix}SYNC_RUNS".upper()

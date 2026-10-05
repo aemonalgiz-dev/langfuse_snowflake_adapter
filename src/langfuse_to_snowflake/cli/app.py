@@ -40,9 +40,10 @@ def main(
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     if not verbose:
-        # Both log every request at INFO.
+        # These log every request or statement at INFO.
         logging.getLogger("httpx").setLevel(logging.WARNING)
         logging.getLogger("snowflake.connector").setLevel(logging.WARNING)
+        logging.getLogger("snowflake.snowpark").setLevel(logging.WARNING)
     ctx.obj = {"env_file": env_file, "project": project, "verbose": verbose}
 
 
@@ -228,14 +229,15 @@ def serve(
 
     from ..api import create_app
 
-    deployment = support.open_deployment(ctx)
-    host = host or deployment.api.host
-    port = port or deployment.api.port
-    if deployment.api.key is None and not support.is_loopback(host):
+    # Checked before anything is opened: an unprotected service must not even start.
+    api = next(iter(support.environment(ctx).values())).api
+    host = host or api.host
+    port = port or api.port
+    if api.key is None and not support.is_loopback(host):
         raise support.fail(
             f"Refusing to listen on {host} without an access key: anyone who can reach the "
             "port could change what is synced. Pass SYNC_API_KEY (or the secret file "
             "sync_api_key), or bind to 127.0.0.1.",
             code=2,
         )
-    uvicorn.run(create_app(deployment), host=host, port=port)
+    uvicorn.run(create_app(support.runtime(ctx)), host=host, port=port)

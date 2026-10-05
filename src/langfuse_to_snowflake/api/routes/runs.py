@@ -40,7 +40,9 @@ def start_reconcile(services: ServicesDep, request: ReconcileRequest | None = No
 def list_runs(services: ServicesDep, project: str | None = None) -> list[Run]:
     """Recent runs, newest first, of one project or of all.
 
-    History is in memory and resets on restart.
+    With SYNC_STORE=snowflake the history is kept in Snowflake and survives a
+    restart; a run that was under way when the service stopped is shown as
+    ``interrupted``. Otherwise it is in memory and starts empty.
     """
     runs = services.runs.recent()
     return [run for run in runs if project is None or run.project == project]

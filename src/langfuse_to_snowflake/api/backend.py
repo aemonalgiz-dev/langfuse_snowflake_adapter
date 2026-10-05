@@ -4,7 +4,7 @@ from collections.abc import Callable, Sequence
 from typing import Protocol
 
 from ..config import Settings
-from ..snowflake import EntityState
+from ..snowflake import EntityState, Sessions
 from ..sync import EntitySchema, SyncResult, open_service, open_source
 from .schemas import ReconcileRequest, SyncRequest
 
@@ -29,14 +29,29 @@ class LiveBackend:
     """Runs against a project's Langfuse keys and the shared Snowflake account.
 
     The settings are asked for at the start of every run, so that a change made
-    in the web app applies from the next run on.
+    in the web app applies from the next run on. ``refresh`` is called before
+    that, to read again what was saved: if it cannot be read the run fails
+    rather than sync with settings that may no longer hold.
     """
 
-    def __init__(self, settings: Callable[[str], Settings]) -> None:
+    def __init__(
+        self,
+        settings: Callable[[str], Settings],
+        *,
+        refresh: Callable[[], None] | None = None,
+        sessions: Sessions | None = None,
+    ) -> None:
         self._settings = settings
+        self._refresh = refresh
+        self._sessions = sessions
+
+    def _for_run(self, project: str | None) -> Settings:
+        if self._refresh is not None:
+            self._refresh()
+        return self._settings(project or "")
 
     def run_sync(self, request: SyncRequest, progress: Progress) -> SyncResult:
-        with open_service(self._settings(request.project or "")) as service:
+        with open_service(self._for_run(request.project), self._sessions) as service:
             return service.run(
                 request.entities,
                 request.start,
@@ -47,13 +62,13 @@ class LiveBackend:
             )
 
     def run_reconcile(self, request: ReconcileRequest, progress: Progress) -> SyncResult:
-        with open_service(self._settings(request.project or "")) as service:
+        with open_service(self._for_run(request.project), self._sessions) as service:
             return service.reconcile(
                 request.entities, request.start, request.end, progress, full=request.full
             )
 
     def read_state(self, project: str) -> list[EntityState]:
-        with open_service(self._settings(project)) as service:
+        with open_service(self._settings(project), self._sessions) as service:
             return service.state()
 
     def discover(

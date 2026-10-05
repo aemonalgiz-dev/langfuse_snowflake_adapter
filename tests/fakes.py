@@ -1,10 +1,6 @@
 """In-memory stand-ins for Langfuse and Snowflake."""
 
-import gzip
-import json
-import re
 from datetime import UTC, datetime
-from pathlib import Path
 
 from langfuse_to_snowflake.snowflake import EntityState, LoadResult
 
@@ -13,126 +9,41 @@ def parse_time(value) -> datetime | None:
     return datetime.fromisoformat(value) if isinstance(value, str) else None
 
 
-class FakeCursor:
-    def __init__(self, connection: "FakeConnection") -> None:
-        self._connection = connection
-        self._rows: list[tuple] = []
-        self.description = None
+class LocalCatalog:
+    """Stands in for ``Catalog`` on Snowpark's emulator, which runs no SQL.
 
-    def execute(self, statement: str, params=None) -> None:
-        self._connection.statements.append((statement, params))
-        self._connection.raise_if_scheduled(statement)
-        columns, self._rows = self._connection.respond(statement, params)
-        self.description = [(name,) for name in columns] if columns else None
+    Tables are looked up in the emulator itself. Views are only remembered:
+    their SQL is kept in ``views`` for the tests to look at.
+    """
 
-    def fetchall(self) -> list[tuple]:
-        return self._rows
+    def __init__(self, session) -> None:
+        self._session = session
+        self.views: dict[str, str] = {}
+        self.added: list[tuple[str, list[tuple[str, str]]]] = []
 
-    def close(self) -> None:
-        pass
+    def kinds(self, names) -> dict[str, str]:
+        registry = self._session._conn.entity_registry
+        found = {}
+        for name in names:
+            if name in self.views:
+                found[name] = "VIEW"
+            elif registry.is_existing_table(name):
+                found[name] = "TABLE"
+        return found
 
+    def add_columns(self, table: str, columns) -> None:
+        from snowflake.snowpark import functions as F
 
-class FakeConnection:
-    """Records every statement and answers the ones the adapter reads results from."""
+        from langfuse_to_snowflake.snowflake import frames
 
-    def __init__(self) -> None:
-        self.statements: list[tuple[str, dict | None]] = []
-        self.staged: dict[str, list[dict]] = {}
-        self.object_types: dict[str, str] = {}
-        self.state: dict[tuple[str, str], dict] = {}
-        self.reconciled: dict[tuple[str, str], str] = {}
-        # Canned answers for the key and earliest-timestamp queries, by table name.
-        self.keys: dict[str, list[tuple]] = {}
-        self.earliest: dict[str, datetime] = {}
-        self.reject_per_file = 0
-        self.closed = False
-        self._copied = 0
-        self._failures: list[tuple[str, Exception]] = []
+        self.added.append((table, list(columns)))
+        frame = self._session.table(table)
+        for name, kind in columns:
+            frame = frame.with_column(name, F.lit(None).cast(frames.snowpark_type(kind)))
+        frame.write.save_as_table(table, mode="overwrite")
 
-    def cursor(self) -> FakeCursor:
-        return FakeCursor(self)
-
-    def close(self) -> None:
-        self.closed = True
-
-    def fail_next(self, prefix: str, error: Exception) -> None:
-        """Make the next statement starting with ``prefix`` raise ``error``, once."""
-        self._failures.append((prefix, error))
-
-    def raise_if_scheduled(self, statement: str) -> None:
-        for index, (prefix, error) in enumerate(self._failures):
-            if statement.startswith(prefix):
-                del self._failures[index]
-                raise error
-
-    def executed(self, prefix: str) -> list[str]:
-        return [statement for statement, _ in self.statements if statement.startswith(prefix)]
-
-    def respond(self, statement: str, params) -> tuple[list[str], list[tuple]]:
-        if statement.startswith("SELECT CURRENT_ACCOUNT"):
-            return (
-                ["account", "user", "role", "warehouse", "database", "schema"],
-                [("acct", "loader", "LOADER", "WH", "DB", "LANGFUSE")],
-            )
-        if statement.startswith("PUT"):
-            path = Path(re.search(r"'file://(.+?)'", statement).group(1))
-            with gzip.open(path, "rt", encoding="ascii") as handle:
-                self.staged[path.name] = [json.loads(line) for line in handle]
-            return ["source", "status"], [(path.name, "UPLOADED")]
-        if statement.startswith("COPY INTO"):
-            filename = re.search(r"FILES = \('(.+?)'\)", statement).group(1)
-            parsed = len(self.staged[filename])
-            rejected = min(self.reject_per_file, parsed)
-            self._copied = parsed - rejected
-            return (
-                ["file", "status", "rows_parsed", "rows_loaded", "errors_seen", "first_error"],
-                [
-                    (
-                        filename,
-                        "PARTIALLY_LOADED" if rejected else "LOADED",
-                        parsed,
-                        parsed - rejected,
-                        rejected,
-                        "Error parsing JSON" if rejected else None,
-                    )
-                ],
-            )
-        if statement.startswith("MERGE INTO") and "%(watermark)s" in statement:
-            self.state[(params["project_id"], params["entity"])] = dict(params)
-            return ["number of rows inserted", "number of rows updated"], [(1, 0)]
-        if statement.startswith("MERGE INTO"):
-            return ["number of rows inserted", "number of rows updated"], [(self._copied, 0)]
-        if statement.startswith("UPDATE") and '"RECONCILED_AT"' in statement:
-            key = (params["project_id"], params["entity"])
-            if key in self.state:
-                self.reconciled[key] = params["reconciled_at"]
-            return ["number of rows updated"], [(int(key in self.state),)]
-        if "INFORMATION_SCHEMA.TABLES" in statement:
-            kind = self.object_types.get(params["name"])
-            return ["TABLE_TYPE"], [(kind,)] if kind else []
-        if statement.startswith('SELECT "ENTITY"'):
-            now = datetime(2026, 1, 1, tzinfo=UTC)
-            rows = [
-                (
-                    entity,
-                    datetime.fromisoformat(saved["watermark"]),
-                    saved["api_version"],
-                    now,
-                    parse_time(self.reconciled.get((project_id, entity))),
-                )
-                for (project_id, entity), saved in sorted(self.state.items())
-                if project_id == params["project_id"]
-            ]
-            columns = ["ENTITY", "WATERMARK", "API_VERSION", "UPDATED_AT", "RECONCILED_AT"]
-            return columns, rows
-        if statement.startswith("SELECT MIN("):
-            table = re.search(r"FROM (\w+)", statement).group(1)
-            return ["EARLIEST"], [(self.earliest.get(table),)]
-        if statement.startswith("SELECT") and '"UPDATED_AT" FROM' in statement:
-            table = re.search(r"FROM (\w+)", statement).group(1)
-            columns = re.findall(r'"([A-Z_]+)"', statement.split(" FROM ")[0])
-            return columns, self.keys.get(table, [])
-        return [], []
+    def create_view(self, name: str, statement: str) -> None:
+        self.views[name] = statement
 
 
 class FakeSource:

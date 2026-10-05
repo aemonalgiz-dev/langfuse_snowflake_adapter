@@ -6,14 +6,15 @@ observations and scores are always extracted, while traces and sessions are
 extracted on v3 and become views over the observations table on v4.
 
 Column definitions are shared by both generations. Where the two APIs name a
-field differently, a column lists every candidate path and the first non-null
-one wins, so the table schema survives a v3 -> v4 upgrade.
+field differently, a column lists every candidate path and the first one that
+holds a value wins, so the table schema survives a v3 -> v4 upgrade.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 
+from . import derived
 from .models import ApiVersion, Column, Endpoint, EntitySpec, ViewSpec
 
 OBSERVATION_FIELD_GROUPS = (
@@ -58,18 +59,6 @@ LISTING_FIELD_GROUPS: Mapping[str, tuple[str, ...]] = {
     "trace_context": ("tags", "release", "traceName"),
 }
 
-_SUBJECT_KIND = 'LOWER({raw}:"subject"."kind"::STRING)'
-_SUBJECT_ID = '{raw}:"subject"."id"::STRING'
-
-
-def _score_subject(kind: str, legacy_path: str) -> str:
-    """Scores v3 nests the scored object under ``subject``; v2 used flat *Id fields."""
-    return (
-        'COALESCE({raw}:"' + legacy_path + '"::STRING, '
-        "IFF(" + _SUBJECT_KIND + " = '" + kind + "', " + _SUBJECT_ID + ", NULL))"
-    )
-
-
 OBSERVATIONS = EntitySpec(
     name="observations",
     key=("TRACE_ID", "ID"),  # v4 observation IDs are only unique within a trace
@@ -89,14 +78,7 @@ OBSERVATIONS = EntitySpec(
         Column("COMPLETION_START_TIME", "TIMESTAMP_TZ", ("completionStartTime",)),
         Column("ENVIRONMENT", "STRING", ("environment",)),
         Column("VERSION", "STRING", ("version",)),
-        Column(
-            "IS_ROOT_OBSERVATION",
-            "BOOLEAN",
-            expr=(
-                'COALESCE(TRY_TO_BOOLEAN({raw}:"isRootObservation"::STRING), '
-                '{raw}:"parentObservationId"::STRING IS NULL)'
-            ),
-        ),
+        Column("IS_ROOT_OBSERVATION", "BOOLEAN", derive=derived.is_root_observation),
         # Trace-level attributes: v4 carries them on every observation, v3 does not.
         Column("USER_ID", "STRING", ("userId",)),
         Column("SESSION_ID", "STRING", ("sessionId",)),
@@ -166,47 +148,19 @@ SCORES = EntitySpec(
         Column("DATA_TYPE", "STRING", ("dataType",)),
         Column("SOURCE", "STRING", ("source",)),
         Column("VALUE", "VARIANT", ("value",)),
-        # v3 scores return one typed value; v2 returned a number plus stringValue.
+        Column("VALUE_NUMERIC", "FLOAT", derive=derived.score_value_numeric),
+        Column("VALUE_STRING", "STRING", derive=derived.score_value_string),
+        Column("SUBJECT_KIND", "STRING", derive=derived.score_subject_kind),
+        Column("TRACE_ID", "STRING", derive=derived.score_trace_id),
         Column(
-            "VALUE_NUMERIC",
-            "FLOAT",
-            expr=(
-                'CASE WHEN IS_BOOLEAN({raw}:"value") THEN IFF({raw}:"value"::BOOLEAN, 1, 0) '
-                'WHEN IS_INTEGER({raw}:"value") OR IS_DECIMAL({raw}:"value") '
-                'OR IS_DOUBLE({raw}:"value") THEN {raw}:"value"::FLOAT END'
-            ),
-        ),
-        Column(
-            "VALUE_STRING",
+            "OBSERVATION_ID",
             "STRING",
-            expr=(
-                'COALESCE({raw}:"stringValue"::STRING, '
-                'IFF(IS_VARCHAR({raw}:"value") OR IS_BOOLEAN({raw}:"value"), '
-                '{raw}:"value"::STRING, NULL))'
-            ),
+            derive=derived.score_subject("observation", "observationId"),
         ),
+        Column("SESSION_ID", "STRING", derive=derived.score_subject("session", "sessionId")),
         Column(
-            "SUBJECT_KIND",
-            "STRING",
-            expr=(
-                "COALESCE(" + _SUBJECT_KIND + ", "
-                "CASE WHEN {raw}:\"observationId\"::STRING IS NOT NULL THEN 'observation' "
-                "WHEN {raw}:\"traceId\"::STRING IS NOT NULL THEN 'trace' "
-                "WHEN {raw}:\"sessionId\"::STRING IS NOT NULL THEN 'session' "
-                "WHEN {raw}:\"datasetRunId\"::STRING IS NOT NULL THEN 'experiment' END)"
-            ),
+            "EXPERIMENT_ID", "STRING", derive=derived.score_subject("experiment", "datasetRunId")
         ),
-        Column(
-            "TRACE_ID",
-            "STRING",
-            expr=(
-                'COALESCE({raw}:"traceId"::STRING, {raw}:"subject"."traceId"::STRING, '
-                "IFF(" + _SUBJECT_KIND + " = 'trace', " + _SUBJECT_ID + ", NULL))"
-            ),
-        ),
-        Column("OBSERVATION_ID", "STRING", expr=_score_subject("observation", "observationId")),
-        Column("SESSION_ID", "STRING", expr=_score_subject("session", "sessionId")),
-        Column("EXPERIMENT_ID", "STRING", expr=_score_subject("experiment", "datasetRunId")),
         Column("TIMESTAMP", "TIMESTAMP_TZ", ("timestamp",)),
         Column("ENVIRONMENT", "STRING", ("environment",)),
         Column("COMMENT", "STRING", ("comment",)),

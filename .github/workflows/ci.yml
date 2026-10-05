@@ -31,7 +31,8 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
-      # Needs no credentials: Langfuse and Snowflake are faked.
+      # Needs no credentials: Langfuse is faked, and the Snowflake adapter runs on
+      # Snowpark's local emulator.
       - name: Unit tests
         run: pytest
 
@@ -51,6 +52,22 @@ jobs:
             -e SNOWFLAKE_WAREHOUSE=ci -e SNOWFLAKE_DATABASE=ci -e SNOWFLAKE_SCHEMA=ci \
             langfuse-to-snowflake:ci
           test $? -eq 2
+      # Settings are kept in Snowflake by default. Without them the service must
+      # not come up, or it would sync with defaults where the data team had
+      # asked for fields to be left out.
+      - name: Does not start when it cannot read its saved settings
+        run: |
+          set +e
+          docker run --rm -e SYNC_API_KEY=ci-access-key \
+            -e LANGFUSE_PUBLIC_KEY=pk-ci -e LANGFUSE_SECRET_KEY=sk-ci \
+            -e SNOWFLAKE_ACCOUNT=ci -e SNOWFLAKE_USER=ci -e SNOWFLAKE_PRIVATE_KEY_PATH=/none \
+            -e SNOWFLAKE_WAREHOUSE=ci -e SNOWFLAKE_DATABASE=ci -e SNOWFLAKE_SCHEMA=ci \
+            langfuse-to-snowflake:ci > output.txt 2>&1
+          code=$?
+          cat output.txt
+          test $code -eq 1
+          grep --quiet "could not be read from Snowflake table" output.txt
+      # There is no Snowflake account here, so this one keeps its settings in a file.
       - name: Starts, serves the web app and reads keys from secret files
         run: |
           mkdir secrets
@@ -59,6 +76,7 @@ jobs:
           printf 'ci-access-key' > secrets/sync_api_key
           chmod -R a+rX secrets
           docker run -d --name app -p 8000:8000 -v "$PWD/secrets:/run/secrets:ro" \
+            -e SYNC_STORE=file \
             -e SNOWFLAKE_ACCOUNT=ci -e SNOWFLAKE_USER=ci -e SNOWFLAKE_PRIVATE_KEY_PATH=/none \
             -e SNOWFLAKE_WAREHOUSE=ci -e SNOWFLAKE_DATABASE=ci -e SNOWFLAKE_SCHEMA=ci \
             langfuse-to-snowflake:ci

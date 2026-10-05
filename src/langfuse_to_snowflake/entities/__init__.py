@@ -19,8 +19,15 @@ from .models import (
     SyncPlan,
     ViewSpec,
 )
-from .naming import load_table_name, state_table_name, table_name, validate_prefix
+from .naming import (
+    runs_table_name,
+    settings_table_name,
+    state_table_name,
+    table_name,
+    validate_prefix,
+)
 from .plan import build_plan
+from .values import column_value, column_values
 
 __all__ = [
     "ENTITIES",
@@ -39,7 +46,10 @@ __all__ = [
     "SyncPlan",
     "ViewSpec",
     "build_plan",
-    "load_table_name",
+    "column_value",
+    "column_values",
+    "runs_table_name",
+    "settings_table_name",
     "state_table_name",
     "table_name",
     "validate_prefix",

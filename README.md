@@ -60,9 +60,14 @@ Things to know about the container:
 - **The compose file publishes the port on this machine only.** The access key
   travels in a request header, so put a TLS-terminating proxy in front before
   exposing it to a network.
-- **What the data team configures is kept in the `config` volume**
-  (`/data/config.json`). Without a volume it lasts until the container is
-  replaced.
+- **It keeps nothing itself.** What the data team configures, and the history
+  of runs, are stored in Snowflake beside the data. The container needs no
+  volume and can be replaced at any time. See
+  [Where settings and run history are kept](#where-settings-and-run-history-are-kept).
+- **It does not start if it cannot read those settings**, and exits with an
+  error instead: syncing with defaults could load fields the data team had
+  asked to leave out. With `restart: unless-stopped` it keeps trying until
+  Snowflake answers.
 - **It runs as an unprivileged user** (uid 10001); on Linux the secret files
   must be readable by it.
 - **Run one container.** Syncs and the scheduler live in the one process.
@@ -87,7 +92,9 @@ is kept per project.
   with its type and how often it has a value. Untick a field and it is
   removed from every record before loading. Because it reads what the project
   logs right now, it keeps up as projects add or drop fields.
+- **Earlier versions:** every saved change to the settings, newest first.
 - **Recent runs** and what each one read, added, updated or found deleted.
+  A run that was under way when the service stopped shows as interrupted.
 - **Deployment:** where it reads from and writes to, for orientation. Not editable.
 
 Changes are checked before they are saved, apply from the next run, and are
@@ -100,6 +107,44 @@ scheduler.
 
 Projects, credentials, connection details, the Langfuse API version and the
 table prefix cannot be changed from the web app, and no secret is ever sent to it.
+
+## Where settings and run history are kept
+
+In Snowflake, in two tables beside the data, unless `SYNC_STORE` says otherwise:
+
+| Table | Contents |
+| --- | --- |
+| `LANGFUSE_SYNC_SETTINGS` | One row per saved change: the project, when, and what differed from the deployment's defaults. The newest row of a project is in effect; the rest is its history. |
+| `LANGFUSE_SYNC_RUNS` | One row per run started through the service: project, kind, what started it, status, times, the request, the result and any error. |
+
+```sql
+SELECT PROJECT, CHANGED_AT, SETTINGS
+FROM LANGFUSE_SYNC_SETTINGS
+ORDER BY CHANGED_AT DESC;
+```
+
+What follows from keeping them there:
+
+- **The service is stateless.** Replace the container, move it, or run the
+  CLI somewhere else with the same environment: all of them see the same
+  settings.
+- **Settings are read when the service starts and again before every run**,
+  so a change saved elsewhere applies from the next run. Showing them in the
+  web app does not touch Snowflake.
+- **If they cannot be read, nothing is synced.** The service does not start,
+  a run fails before it reads anything from Langfuse, and a CLI command
+  stops with exit code 1. A change that cannot be saved is refused, and the
+  settings stay as they were.
+- **Saving a change resumes the warehouse**, as does starting the service.
+  Both are single small statements.
+- **Recording a run never decides how it ends.** If the row cannot be
+  written, that is logged and the run carries on.
+
+`SYNC_STORE=file` keeps the settings in the JSON file named by
+`SYNC_CONFIG_FILE` instead, and the run history in memory. That suits trying
+the service out, or running it where Snowflake is not reachable at start. In
+a container, mount a volume and point `SYNC_CONFIG_FILE` at it (the image has
+`/data` ready for that); without a file, changes last until a restart.
 
 ## Install without a container
 
@@ -127,7 +172,8 @@ file, and secrets from [mounted files](#run-it-in-a-container).
 | `SYNC_RECONCILE_DAYS`, `SYNC_RECONCILE_EVERY_HOURS`, `SYNC_RECONCILE_FULL`, `SYNC_CHECK_DELETIONS` | See [Keeping loaded data up to date](#keeping-loaded-data-up-to-date). |
 | `LANGFUSE_MAX_RETRIES`, `SNOWFLAKE_MAX_RETRIES` | See [Retries](#retries). |
 | `SYNC_SCHEDULE_MINUTES` | The service starts a sync this often. `0` (default) leaves that to the web app or an outside scheduler. |
-| `SYNC_CONFIG_FILE` | Where settings changed in the web app are kept. The image sets `/data/config.json`. |
+| `SYNC_STORE`, `SYNC_CONFIG_FILE` | Where settings changed in the web app and the history of runs are kept: `snowflake` (default) or `file`. See [Where settings and run history are kept](#where-settings-and-run-history-are-kept). |
+| `SYNC_BATCH_MAX_ROWS`, `SYNC_BATCH_MAX_BYTES`, `SYNC_RECORD_MAX_BYTES` | How much goes to Snowflake at a time, and the largest record that is loaded. See [How syncing works](#how-syncing-works). |
 | `SYNC_API_HOST`, `SYNC_API_PORT`, `SYNC_API_KEY` | The web app and HTTP API. |
 
 The `SYNC_*` settings that describe what is synced are defaults: the data team
@@ -224,14 +270,15 @@ Interactive docs are at `/docs`. If `SYNC_API_KEY` is set, send it as the
 | `GET /projects` | The projects this deployment syncs. |
 | `GET /schema` | The fields a project's newest records have, read from Langfuse now: type, how often each has a value, whether it is left out. |
 | `GET /config` | The settings a team can change, their defaults, which are changed, and the deployment they apply to. |
-| `PUT /config` | Changes settings. Send only what should change; `null` puts one back to its default. `422` with the problem per setting if the result is not valid. |
+| `PUT /config` | Changes settings. Send only what should change; `null` puts one back to its default. `422` with the problem per setting if the result is not valid, `503` if it could not be saved. |
 | `DELETE /config` | Drops every saved change. |
+| `GET /config/history` | Earlier versions of a project's settings, newest first. Empty with `SYNC_STORE=file`. |
 | `GET /schedule` | Whether the service syncs by itself, and when the next sync is due. |
 | `GET /entities` | How each configured entity is produced (table or view, and from which endpoint), plus the configured sampling and filters. |
 | `POST /sync` | Starts a sync in the background and returns `202` with a run. `409` if a run is already active. |
 | `POST /reconcile` | Starts a reconcile in the background, the same way. Optional body: `entities`, `from`, `to`, `full`. |
 | `GET /runs/{id}` | Run status, with per-entity row counts updated as it progresses. |
-| `GET /runs` | Recent sync and reconcile runs. Held in memory; cleared on restart. |
+| `GET /runs` | Recent sync and reconcile runs, including those from before a restart. With `SYNC_STORE=file` they are held in memory and cleared on restart. |
 | `GET /state` | Per entity, the watermark and when it was last reconciled, read from Snowflake. |
 
 With several projects, the endpoints about one project take `?project=NAME`
@@ -268,12 +315,18 @@ the fields you usually filter on, plus the complete API record in `RAW`:
 | `LANGFUSE_ANNOTATION_QUEUES` | One row per annotation queue. |
 | `LANGFUSE_ANNOTATION_QUEUE_ITEMS` | One row per queued item: its queue, what is to be reviewed, and whether it is `PENDING` or `COMPLETED`. |
 | `LANGFUSE_SYNC_STATE` | The watermark per project and entity, and when it was last reconciled. |
+| `LANGFUSE_SYNC_SETTINGS`, `LANGFUSE_SYNC_RUNS` | The service's own records. See [Where settings and run history are kept](#where-settings-and-run-history-are-kept). |
 
 Every table carries `PROJECT_ID`, so several Langfuse projects can share a
 schema: run the sync once per set of API keys.
 
 `_LOADED_AT` only changes when a record's content changes, which makes it a
-reliable cursor for incremental models downstream.
+reliable cursor for incremental models downstream. `_RAW_HASH` is the
+fingerprint of the record that tells whether it changed.
+
+The typed columns are worked out from the record before it is loaded. A
+field that cannot be read as its column's type becomes `NULL` there and is
+still in `RAW` as Langfuse sent it.
 
 Anything not promoted to a column is still in `RAW`:
 
@@ -510,9 +563,10 @@ so they keep filling after an upgrade. Things to know when moving from v3 to v4:
 
 ## How syncing works
 
-Each run reads records in time windows, writes them to gzipped NDJSON, uploads
-that to a temporary table's stage, and merges it into the target table on
-`PROJECT_ID` and the record ID. Re-running any range is idempotent.
+Each run reads records in time windows, works out the typed columns of each,
+and sends them to Snowflake in batches. Each batch is merged into the target
+table on `PROJECT_ID` and the record ID; a row whose record is unchanged is
+left alone. Re-running any range is idempotent.
 
 - **Watermark.** After each window (`SYNC_WINDOW_HOURS`) the watermark moves
   forward, so an interrupted backfill resumes where it stopped.
@@ -522,9 +576,13 @@ that to a temporary table's stage, and merges it into the target table on
   Records that surface later than that are picked up by the next reconcile.
 - **First run.** Goes back `SYNC_INITIAL_BACKFILL_DAYS`. Use `sync --from` for
   anything older; an explicit range never moves the watermark.
-- **Rejected records.** A record Snowflake cannot parse, or that exceeds its
-  row size limit, is skipped rather than blocking the run. The count is logged,
-  returned as `rows_rejected`, and makes the CLI exit with code 3.
+- **Batches.** At most `SYNC_BATCH_MAX_ROWS` rows (20,000) and about
+  `SYNC_BATCH_MAX_BYTES` (32 MB) at a time. A batch is held in memory while
+  it is sent, so lower these on a small container with large records.
+- **Rejected records.** A record without an ID, or larger than
+  `SYNC_RECORD_MAX_BYTES` (16 MB, what a Snowflake row holds), is skipped
+  rather than blocking the run. The count is logged, returned as
+  `rows_rejected`, and makes the CLI exit with code 3.
 
 For very large projects, Langfuse recommends its scheduled blob storage export
 over paging through the API; that would pair with Snowpipe rather than this tool.
@@ -543,20 +601,22 @@ exponential backoff and jitter.
   minutes, a longer quota is spent and the run fails instead of stalling.
   Langfuse Cloud's Hobby plan allows 30 requests a minute (15 on the deprecated
   endpoints), so a large first backfill there takes a while.
-- On Snowflake only repeatable work is retried: connecting, the idempotent
-  statements, and the load of one file as a unit. A retried load starts again
-  from an empty load table, so a half-finished attempt cannot double up.
+- On Snowflake only repeatable work is retried: connecting, reading, schema
+  and state changes, and the merge of one batch. Merging a batch a second time
+  changes nothing, so an attempt that got through before the connection
+  dropped cannot double up. Saving a settings change is not retried, since it
+  adds a row each time; it is reported as not saved instead.
 
 ## Project layout
 
 ```
 src/langfuse_to_snowflake/
     config/      settings from the environment, and the store for what the web app changes
-    entities/    the entities: endpoints, columns, object names, the sync plan
+    entities/    the entities: endpoints, columns and how their values are worked out, object names, the sync plan
     langfuse/    API client, its errors and retry policy
-    snowflake/   adapter, key-pair auth, SQL builders and retry policy
+    snowflake/   adapter on Snowpark, sessions and key-pair auth, the service's own tables, retry policy
     selection/   filters and trace-level sampling
-    sync/        the sync service, reconciliation, result models and the protocols they depend on
+    sync/        the sync service, reconciliation, result models, the protocols they depend on, and the wiring of a running service
     api/         FastAPI app, routes, schemas, background runs and the scheduler
     web/         the web app: one static page, no build step
     cli/         Typer commands
@@ -567,32 +627,63 @@ Dockerfile, docker-compose.yml
 Each folder's `__init__.py` re-exports its public names, so imports read
 `from langfuse_to_snowflake.snowflake import SnowflakeAdapter`.
 
+The Snowflake adapter is written against
+[Snowpark](https://docs.snowflake.com/en/developer-guide/snowpark/python/index)
+DataFrames rather than SQL text. Snowpark takes a couple of seconds to
+import, so it is only loaded by the commands that reach Snowflake.
+
 ## Testing
 
 ```bash
 pytest
 ```
 
-runs the unit tests against fakes of the Langfuse API and the Snowflake
-connection. They need no credentials and no network.
+runs the unit tests. They need no credentials and no network: Langfuse is
+faked, and the Snowflake adapter runs for real on
+[Snowpark's local emulator](https://docs.snowflake.com/en/developer-guide/snowpark/python/testing-locally),
+in process. Loading, merging, change detection, sync state, the settings
+and run tables and whole syncs end to end are all executed there, not
+asserted on as statements.
+
+The emulator is not Snowflake. What it cannot show:
+
+- **It runs no SQL.** The three things written as SQL are replaced by a
+  stand-in in the tests: telling a table from a view, adding a column to an
+  existing table, and defining the traces and sessions views. The views are
+  only checked to parse as Snowflake SQL and to read columns that exist.
+- **How rows travel to Snowflake.** The emulator takes them in memory; the
+  upload itself only happens against a real account.
+- **Snowflake's own behaviour**: privileges, type coercion at the edges, limits.
 
 ```bash
 pytest -m live
 ```
 
-runs the live tests: they read a real Langfuse project to prove that the API
-still accepts what the client sends (paths, parameters, field groups, the
-filters sent along, the lighter requests used for reconciling). They only
-read. The keys come from the environment or from `.env`; without any, the
-tests are skipped. They never run unless asked for.
+runs the live tests, which never run unless asked for. Credentials come from
+the environment or from `.env`; a service without any is skipped.
+
+- **Langfuse** (`tests/live`): reads a real project to prove that the API
+  still accepts what the client sends (paths, parameters, field groups, the
+  filters sent along, the lighter requests used for reconciling). Read-only.
+- **Snowflake** (`tests/snowflake`): the same adapter tests the emulator
+  runs, now on a real account, plus a test of what the views return. They
+  write to tables of their own, named `L2S_TEST_*`, in the configured
+  schema and drop them afterwards. This is what closes the gaps listed above.
 
 ### On GitHub
 
 | Workflow | When | What it does |
 | --- | --- | --- |
-| `CI` | every push and pull request | Lint, the unit tests on Python 3.11 and 3.12, and a build of the container image that is then started to check it refuses to run without an access key, serves the web app and reads keys from secret files. Needs no secrets. |
-| `Live tests` | pushes to `main`, weekly, and on demand | The live tests against the Langfuse test project. |
+| `CI` | every push and pull request | Lint, the unit tests on Python 3.11 and 3.12, and a build of the container image that is then started to check it refuses to run without an access key or without its saved settings, serves the web app and reads keys from secret files. Needs no secrets. |
+| `Live tests` | pushes to `main`, weekly, and on demand | The live tests, in one job per service. |
 
-The live workflow needs three repository secrets (Settings, Secrets and
-variables, Actions): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
-`LANGFUSE_BASE_URL`.
+The live workflow reads repository secrets (Settings, Secrets and variables,
+Actions):
+
+| Job | Secrets |
+| --- | --- |
+| Langfuse | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` |
+| Snowflake | `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY` (the PEM), `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, and optionally `SNOWFLAKE_ROLE` and `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` |
+
+Until the Snowflake secrets are set, that job says so and passes without
+running anything. A run takes a few minutes of the smallest warehouse.

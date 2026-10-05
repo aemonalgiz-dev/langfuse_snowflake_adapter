@@ -136,7 +136,7 @@ td.empty { color: var(--muted); }
 
 .status { font-weight: 600; white-space: nowrap; }
 .status.succeeded { color: var(--ok); }
-.status.failed { color: var(--danger); }
+.status.failed, .status.interrupted { color: var(--danger); }
 .status.running, .status.queued { color: var(--accent); }
 
 .facts { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }

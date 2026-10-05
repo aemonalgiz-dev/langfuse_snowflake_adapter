@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 ApiVersion = Literal["v4", "v3"]
 Pagination = Literal["cursor", "page"]
@@ -15,16 +15,17 @@ FilterParam = Literal["single", "repeat", "csv"]
 
 @dataclass(frozen=True)
 class Column:
-    """A typed column extracted from the raw record.
+    """A typed column worked out from the raw record before it is loaded.
 
-    ``paths`` are dotted JSON paths tried in order. ``expr`` is a SQL expression
-    with a ``{raw}`` placeholder for cases a path and a cast cannot express.
+    ``paths`` are dotted JSON paths tried in order; the first that holds a
+    value of the column's type wins. ``derive`` takes the whole record, for
+    the cases a path and a conversion cannot express.
     """
 
     name: str
     type: str
     paths: tuple[str, ...] = ()
-    expr: str | None = None
+    derive: Callable[[Mapping[str, Any]], Any] | None = None
 
 
 @dataclass(frozen=True)

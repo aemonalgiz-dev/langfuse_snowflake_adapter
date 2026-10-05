@@ -21,7 +21,7 @@ def wired(settings, monkeypatch):
     source, warehouse = FakeSource(), FakeWarehouse({"scores": NOW})
 
     @contextmanager
-    def fake_open_service(opened_with):
+    def fake_open_service(opened_with, sessions=None):
         assert opened_with is settings
         yield SyncService(settings.langfuse, settings.sync, source, warehouse, clock=lambda: NOW)
 
@@ -33,7 +33,7 @@ def test_live_backend_asks_for_the_settings_on_every_run(settings, monkeypatch):
     opened_with = []
 
     @contextmanager
-    def fake_open_service(current):
+    def fake_open_service(current, sessions=None):
         opened_with.append(current.sync.sample_rate)
         yield SyncService(
             current.langfuse, current.sync, FakeSource(), FakeWarehouse(), clock=lambda: NOW

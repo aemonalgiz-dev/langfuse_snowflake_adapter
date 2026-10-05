@@ -200,10 +200,45 @@ async function loadStatus() {
     : "No schedule is set: syncs start from here or from an outside scheduler.";
 }
 
+// ---- Earlier versions of the settings ---------------------------------------
+
+function describeChange(settings) {
+  const names = Object.keys(settings);
+  if (!names.length) return "Nothing: everything at the deployment's defaults";
+  return names
+    .map((name) => {
+      const value = settings[name];
+      const text = Array.isArray(value) ? value.join(", ") || "(none)" : String(value);
+      return `${name.replaceAll("_", " ")}: ${text}`;
+    })
+    .join("; ");
+}
+
+async function loadHistory() {
+  $("history-message").textContent = "";
+  try {
+    const changes = await api(scoped("/config/history"));
+    const rows = changes.map((change) =>
+      element("tr", {}, [
+        timeCell(change.changed_at, ""),
+        element("td", { text: describeChange(change.settings) }),
+      ]),
+    );
+    $("history-rows").replaceChildren(
+      ...(rows.length ? rows : [emptyRow(2, "Nothing has been changed for this project yet.")]),
+    );
+  } catch (error) {
+    if (error.status !== 401) {
+      $("history-message").textContent = `The earlier versions could not be read: ${error.message}`;
+    }
+  }
+}
+
 // ---- Runs ------------------------------------------------------------------
 
 function summarize(run) {
   if (run.error) return run.error;
+  if (run.status === "interrupted") return "The service stopped before this run finished.";
   if (!run.result) return run.status === "queued" ? "Waiting to start" : "Starting";
   const total = { fetched: 0, inserted: 0, updated: 0, rejected: 0, deleted: 0 };
   const unavailable = [];
@@ -244,7 +279,16 @@ async function loadRuns() {
       ]),
     );
   $("run-rows").replaceChildren(
-    ...(rows.length ? rows : [emptyRow(4, "No runs of this project since the service started.")]),
+    ...(rows.length
+      ? rows
+      : [
+          emptyRow(
+            4,
+            config && config.runs_kept
+              ? "No runs of this project yet."
+              : "No runs of this project since the service started.",
+          ),
+        ]),
   );
   const active = runs.find((run) => run.status === "queued" || run.status === "running");
   $("sync-now").disabled = Boolean(active);
@@ -471,6 +515,12 @@ function renderConfig() {
   $("deployment").textContent =
     `${deployment.langfuse_host} to ${deployment.snowflake_database}.${deployment.snowflake_schema}`;
   $("persist-warning").hidden = config.persisted;
+  $("runs-note").textContent = config.runs_kept
+    ? "Kept in Snowflake, so they are still here after a restart."
+    : "Kept until the service restarts.";
+  // Shown closed; the list is read when it is opened.
+  $("history").hidden = !config.has_history;
+  if ($("history").open) loadHistory();
 
   $("entities").replaceChildren(
     ...choices.entities.map((name) => {
@@ -520,6 +570,8 @@ function renderConfig() {
     ["Warehouse", deployment.snowflake_warehouse],
     ["User and role", [deployment.snowflake_user, deployment.snowflake_role].filter(Boolean).join(" / ")],
     ["Object prefix", deployment.table_prefix || "(none)"],
+    ["Settings kept in", config.stored_in || "Nowhere: they last until a restart"],
+    ["Run history kept in", config.runs_stored_in || "Memory: it starts empty after a restart"],
   ];
   $("deployment-list").replaceChildren(
     ...facts.flatMap(([term, text]) => [element("dt", { text: term }), element("dd", { text })]),
@@ -628,6 +680,9 @@ async function showProject(name) {
 }
 
 $("project").addEventListener("change", () => showProject($("project").value));
+$("history").addEventListener("toggle", () => {
+  if ($("history").open) loadHistory();
+});
 
 async function start() {
   let projects;

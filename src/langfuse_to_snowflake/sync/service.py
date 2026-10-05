@@ -8,20 +8,23 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timedelta
 from itertools import chain, islice
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from ..config import LangfuseSettings, Settings, SyncSettings
 from ..entities import ApiVersion, Extract, SyncPlan, build_plan, table_name
 from ..langfuse import LangfuseApiError, LangfuseClient
 from ..selection import EntitySelection, Selection, is_excluded, required_fields
-from ..snowflake import EntityState, SnowflakeAdapter
+from ..snowflake import EntityState, Sessions
 from .discover import EntitySchema, FieldSchema, describe
 from .loading import Loader
 from .models import EntityResult, ReconcileResult, SyncResult
 from .protocols import Source, Warehouse
 from .reconcile import Reconciler, log_deleted
 from .timing import iter_windows, utcnow
+
+if TYPE_CHECKING:
+    from ..snowflake import SnowflakeAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -541,19 +544,34 @@ class SyncService:
         )
 
 
-def _adapter(settings: Settings) -> SnowflakeAdapter:
+def _adapter(settings: Settings, sessions: Sessions | None = None) -> SnowflakeAdapter:
+    # Imported here: Snowpark is slow to load and not every command needs it.
+    from ..snowflake import SnowflakeAdapter
+
     return SnowflakeAdapter(
         settings.snowflake,
         table_prefix=settings.sync.table_prefix,
         batch_max_rows=settings.sync.batch_max_rows,
         batch_max_bytes=settings.sync.batch_max_bytes,
+        record_max_bytes=settings.sync.record_max_bytes,
+        sessions=sessions,
     )
 
 
+class _NoWarehouse:
+    """Stands in for Snowflake where only Langfuse is read."""
+
+    def __getattr__(self, name: str) -> Any:
+        raise RuntimeError("This service was opened without a connection to Snowflake")
+
+
 @contextmanager
-def open_service(settings: Settings) -> Iterator[SyncService]:
-    """A sync service wired to live Langfuse and Snowflake connections."""
-    adapter = _adapter(settings)
+def open_service(settings: Settings, sessions: Sessions | None = None) -> Iterator[SyncService]:
+    """A sync service wired to live Langfuse and Snowflake connections.
+
+    Give ``sessions`` to share a Snowflake login with whatever else uses them.
+    """
+    adapter = _adapter(settings, sessions)
     with LangfuseClient(settings.langfuse) as client, adapter:
         yield SyncService(settings.langfuse, settings.sync, client, adapter)
 
@@ -565,4 +583,4 @@ def open_source(settings: Settings) -> Iterator[SyncService]:
     Snowflake is never connected, so ``discover`` works even while it cannot be reached.
     """
     with LangfuseClient(settings.langfuse) as client:
-        yield SyncService(settings.langfuse, settings.sync, client, _adapter(settings))
+        yield SyncService(settings.langfuse, settings.sync, client, _NoWarehouse())

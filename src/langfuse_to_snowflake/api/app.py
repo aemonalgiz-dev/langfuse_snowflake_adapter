@@ -7,9 +7,11 @@ from fastapi import FastAPI
 
 from .. import __version__, web
 from ..config import ConfigStore, Deployment, Settings
+from ..sync import Runtime, open_runtime
 from .backend import Backend, LiveBackend
 from .deps import Services
 from .routes import router
+from .runlog import RunLog, TableRunLog
 from .runs import RunManager
 from .scheduler import Scheduler
 from .schemas import SyncRequest
@@ -18,16 +20,23 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(
-    settings: Settings | ConfigStore | Deployment | None = None, backend: Backend | None = None
+    settings: Settings | ConfigStore | Deployment | Runtime | None = None,
+    backend: Backend | None = None,
+    run_log: RunLog | None = None,
 ) -> FastAPI:
     """Build the application.
 
-    Give a ``Deployment`` for every project the environment declares. A single
-    ``ConfigStore`` or plain ``Settings`` makes a one-project application; with
-    plain ``Settings``, changes last only until the process ends.
+    Without arguments, everything comes from the environment: the projects,
+    and where their settings and the history of runs are kept. Give a
+    ``Runtime`` for the same, already opened. A ``Deployment``, a single
+    ``ConfigStore`` or plain ``Settings`` make an application that keeps no run
+    history; with plain ``Settings``, changes last only until the process ends.
     """
+    runtime = settings if isinstance(settings, Runtime) else None
     if settings is None:
-        deployment = Deployment.open()
+        runtime = open_runtime()
+    if runtime is not None:
+        deployment = runtime.deployment
     elif isinstance(settings, Deployment):
         deployment = settings
     elif isinstance(settings, ConfigStore):
@@ -35,8 +44,20 @@ def create_app(
     else:
         deployment = Deployment.of(ConfigStore(settings))
 
-    backend = backend or LiveBackend(lambda project: deployment.store(project).current())
-    runs = RunManager(backend)
+    sessions = runtime.sessions if runtime is not None else None
+    if run_log is None and runtime is not None and runtime.runs is not None:
+        run_log = TableRunLog(runtime.runs)
+    backend = backend or LiveBackend(
+        lambda project: deployment.store(project).current(),
+        refresh=deployment.refresh,
+        sessions=sessions,
+    )
+    # One Snowflake login covers a run and the record of it.
+    runs = (
+        RunManager(backend, log=run_log, scope=sessions.use)
+        if run_log is not None and sessions is not None
+        else RunManager(backend, log=run_log)
+    )
 
     def scheduler_for(store: ConfigStore) -> Scheduler:
         return Scheduler(

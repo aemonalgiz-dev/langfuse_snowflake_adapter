@@ -20,6 +20,8 @@ ENV = {
     "SNOWFLAKE_WAREHOUSE": "WH",
     "SNOWFLAKE_DATABASE": "DB",
     "SNOWFLAKE_SCHEMA": "LANGFUSE",
+    # Settings in Snowflake are covered by tests of their own.
+    "SYNC_STORE": "file",
     # One window for the whole 30-day backfill, so the fake source is read once.
     "SYNC_WINDOW_HOURS": "720",
 }
@@ -41,7 +43,7 @@ def backends(monkeypatch):
     warehouse = FakeWarehouse()
 
     @contextmanager
-    def fake_open_service(settings):
+    def fake_open_service(settings, sessions=None):
         yield SyncService(settings.langfuse, settings.sync, source, warehouse, clock=lambda: NOW)
 
     monkeypatch.setattr(support, "open_service", fake_open_service)

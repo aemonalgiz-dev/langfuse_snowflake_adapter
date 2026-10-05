@@ -137,7 +137,7 @@ def test_settings_load_all_shares_snowflake_and_defaults(monkeypatch):
 
 def test_each_project_keeps_its_own_changes_in_the_one_file(monkeypatch, tmp_path):
     path = tmp_path / "config.json"
-    _set(monkeypatch, {**TWO, "SYNC_CONFIG_FILE": str(path)})
+    _set(monkeypatch, {**TWO, "SYNC_STORE": "file", "SYNC_CONFIG_FILE": str(path)})
     deployment = Deployment.open(env_file=None)
 
     deployment.store("support").update({"sample_rate": 0.1, "filters": ["environment=production"]})

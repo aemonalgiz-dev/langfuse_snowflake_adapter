@@ -10,7 +10,9 @@
 #
 # Nobody types a key into the web app except its own access key, sync_api_key,
 # which engineering hands to the data team. What the data team then sets up per
-# project (filters, sampling, fields to leave out) is kept in the config volume.
+# project (filters, sampling, fields to leave out) is kept in Snowflake, in the
+# table LANGFUSE_SYNC_SETTINGS beside the data, and so is the history of runs.
+# The container holds nothing and needs no volume.
 
 services:
   langfuse-to-snowflake:
@@ -41,8 +43,6 @@ services:
       # Published on this machine only. Put a TLS-terminating proxy in front
       # before exposing it further: the access key travels in a request header.
       - "127.0.0.1:8000:8000"
-    volumes:
-      - config:/data
 
 secrets:
   # One value per file. On Linux they must be readable by the container's
@@ -60,6 +60,3 @@ secrets:
     file: ./secrets/snowflake_private_key
   sync_api_key:
     file: ./secrets/sync_api_key
-
-volumes:
-  config:

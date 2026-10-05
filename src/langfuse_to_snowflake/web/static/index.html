@@ -72,7 +72,8 @@
           <p class="muted">Changes apply from the next run.</p>
         </div>
         <p id="persist-warning" class="notice" hidden>
-          No <code>SYNC_CONFIG_FILE</code> is set, so changes made here last only until the service restarts.
+          Changes made here are not saved anywhere, so they last only until the service restarts.
+          Engineering chooses where they are kept, with <code>SYNC_STORE</code>.
         </p>
         <p class="error" data-error="" role="alert" hidden></p>
 
@@ -190,12 +191,32 @@
           <button type="button" id="reset" class="secondary">Reset to defaults</button>
           <span id="save-message" class="muted" role="status"></span>
         </div>
+
+        <details id="history" hidden>
+          <summary>Earlier versions</summary>
+          <p class="hint">
+            Every saved change, newest first. Each lists what differed from the deployment's
+            defaults at the time.
+          </p>
+          <p id="history-message" class="muted" role="status"></p>
+          <div class="scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Saved</th>
+                  <th scope="col">Changed from the defaults</th>
+                </tr>
+              </thead>
+              <tbody id="history-rows"></tbody>
+            </table>
+          </div>
+        </details>
       </form>
 
       <section class="card" aria-labelledby="runs-title">
         <div class="card-head">
           <h2 id="runs-title">Recent runs</h2>
-          <p class="muted">Kept until the service restarts.</p>
+          <p id="runs-note" class="muted">Kept until the service restarts.</p>
         </div>
         <div class="scroll">
           <table>

@@ -49,7 +49,7 @@ def deployment(settings, tmp_path) -> Deployment:
 
     def project(name: str, host: str) -> ConfigStore:
         langfuse = settings.langfuse.model_copy(update={"name": name, "host": host})
-        return ConfigStore(settings.model_copy(update={"langfuse": langfuse}), file=file)
+        return ConfigStore(settings.model_copy(update={"langfuse": langfuse}), storage=file)
 
     stores = {
         "support": project("support", "https://cloud.langfuse.com"),

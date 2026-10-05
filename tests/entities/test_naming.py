@@ -1,7 +1,8 @@
 import pytest
 
 from langfuse_to_snowflake.entities import (
-    load_table_name,
+    runs_table_name,
+    settings_table_name,
     state_table_name,
     table_name,
     validate_prefix,
@@ -18,5 +19,6 @@ def test_prefix_validation():
 
 def test_object_names():
     assert table_name("LF_", "traces") == "LF_TRACES"
-    assert load_table_name("LF_", "traces") == "LF_TRACES__LOAD"
     assert state_table_name("LF_") == "LF_SYNC_STATE"
+    assert settings_table_name("lf_") == "LF_SYNC_SETTINGS"
+    assert runs_table_name("") == "SYNC_RUNS"

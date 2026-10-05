@@ -192,6 +192,7 @@ def test_open_reads_the_environment_and_the_file_it_names(monkeypatch, tmp_path)
     path.write_text(json.dumps({"version": 1, "overrides": {"sample_rate": 0.1}}))
     for name, value in {
         **REQUIRED,
+        "SYNC_STORE": "file",
         "SYNC_CONFIG_FILE": str(path),
         "SYNC_SAMPLE_RATE": "0.9",
     }.items():

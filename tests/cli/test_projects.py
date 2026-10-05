@@ -25,6 +25,8 @@ ENV = {
     "SNOWFLAKE_WAREHOUSE": "WH",
     "SNOWFLAKE_DATABASE": "DB",
     "SNOWFLAKE_SCHEMA": "LANGFUSE",
+    # Settings in Snowflake are covered by tests of their own.
+    "SYNC_STORE": "file",
     "SYNC_WINDOW_HOURS": "720",
     "SYNC_ENTITIES": "scores",
 }
@@ -46,7 +48,7 @@ def projects(monkeypatch) -> dict[str, Project]:
     opened = []
 
     @contextmanager
-    def fake_open_service(settings):
+    def fake_open_service(settings, sessions=None):
         project = by_key[settings.langfuse.public_key]
         opened.append(settings.langfuse.name)
         yield SyncService(

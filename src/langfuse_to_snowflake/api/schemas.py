@@ -10,7 +10,8 @@ from ..selection import parse_filter
 from ..sync import SyncResult
 
 RunKind = Literal["sync", "reconcile"]
-RunStatus = Literal["queued", "running", "succeeded", "failed"]
+# ``interrupted``: recorded as started by a process that is no longer there.
+RunStatus = Literal["queued", "running", "succeeded", "failed", "interrupted"]
 RunTrigger = Literal["manual", "schedule"]
 
 
@@ -190,8 +191,22 @@ class ConfigResponse(BaseModel):
     exclude_fields: list[ParsedField]
     choices: ConfigChoices
     deployment: DeploymentInfo
-    # False when no SYNC_CONFIG_FILE is set: changes then last until a restart.
+    # False when changes are kept nowhere: they then last until a restart.
     persisted: bool
+    # Where changes are kept, in words: a Snowflake table or a file.
+    stored_in: str | None = None
+    # Whether earlier versions are kept, for ``GET /config/history``.
+    has_history: bool = False
+    # Whether the history of runs outlives the service, and where it is then.
+    runs_kept: bool = False
+    runs_stored_in: str | None = None
+
+
+class ConfigChange(BaseModel):
+    """One saved version of a project's settings: only what differed from the defaults."""
+
+    changed_at: datetime
+    settings: dict[str, Any]
 
 
 class ConfigUpdate(BaseModel):

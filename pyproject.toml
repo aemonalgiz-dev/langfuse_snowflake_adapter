@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.7",
     "pydantic-settings>=2.7",
     "snowflake-connector-python>=3.12",
+    "snowflake-snowpark-python>=1.30",
     "tenacity>=8.2",
     "typer>=0.12",
     "uvicorn>=0.30",
@@ -24,6 +25,10 @@ dependencies = [
 dev = [
     "pytest>=8",
     "ruff>=0.6",
+    # Snowpark's local emulator, which the tests run the Snowflake adapter on.
+    "snowflake-snowpark-python[localtest]>=1.30",
+    # Checks that the SQL the emulator cannot run at least parses.
+    "sqlglot>=25",
 ]
 
 [project.scripts]
@@ -35,7 +40,13 @@ packages = ["src/langfuse_to_snowflake"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "live: reads a real Langfuse project; needs credentials and network (run with -m live)",
+    "live: uses the real Langfuse project or Snowflake account; needs credentials (run with -m live)",
+]
+filterwarnings = [
+    # Raised inside Snowpark's emulator by the pandas it runs on; nothing of ours.
+    "ignore::pandas.errors.ChainedAssignmentError",
+    "ignore::FutureWarning:snowflake.snowpark",
+    "ignore::DeprecationWarning:snowflake",
 ]
 # Live tests never run unless asked for.
 addopts = "-m 'not live'"
