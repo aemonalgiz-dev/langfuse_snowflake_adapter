@@ -4,6 +4,9 @@ Every test that takes ``warehouse`` runs on the emulator. With ``pytest -m
 live`` the same tests run against the Snowflake account in the environment or
 the project's ``.env``, in tables under a prefix of their own that are dropped
 afterwards. Without an account they are skipped.
+
+That second way has never been run: there has been no account to run it on.
+It is kept for whoever deploys this against one.
 """
 
 import json

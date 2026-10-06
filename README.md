@@ -645,7 +645,11 @@ in process. Loading, merging, change detection, sync state, the settings
 and run tables and whole syncs end to end are all executed there, not
 asserted on as statements.
 
-The emulator is not Snowflake. What it cannot show:
+### What has never run on Snowflake
+
+The emulator is the only Snowflake this project has been tested on. **Nothing
+here has been executed against a real Snowflake account.** The emulator covers
+the logic; these it cannot:
 
 - **It runs no SQL.** The three things written as SQL are replaced by a
   stand-in in the tests: telling a table from a view, adding a column to an
@@ -655,35 +659,46 @@ The emulator is not Snowflake. What it cannot show:
   upload itself only happens against a real account.
 - **Snowflake's own behaviour**: privileges, type coercion at the edges, limits.
 
+The first deployment is therefore also the first real test. Point it at a
+schema that holds nothing else and go one step at a time:
+
+1. `langfuse-to-snowflake check` logs in and shows the session it got.
+2. `langfuse-to-snowflake init` creates the tables and the two views, which
+   runs the SQL the emulator could not.
+3. `langfuse-to-snowflake sync --from <yesterday>` loads a small range.
+   Then look at `LANGFUSE_OBSERVATIONS` and at the `LANGFUSE_TRACES` view.
+
+With an account at hand, the adapter's own tests can be run on it too:
+
 ```bash
-pytest -m live
+pytest -m live tests/snowflake
 ```
 
-runs the live tests, which never run unless asked for. Credentials come from
-the environment or from `.env`; a service without any is skipped.
+They take `SNOWFLAKE_*` from the environment or `.env`, write to tables of
+their own named `L2S_TEST_*` in the configured schema, and drop them
+afterwards. They are the tests the emulator runs, plus one of what the views
+return. They have never been run either, so a failure there may be the
+adapter's or the test's.
 
-- **Langfuse** (`tests/live`): reads a real project to prove that the API
-  still accepts what the client sends (paths, parameters, field groups, the
-  filters sent along, the lighter requests used for reconciling). Read-only.
-- **Snowflake** (`tests/snowflake`): the same adapter tests the emulator
-  runs, now on a real account, plus a test of what the views return. They
-  write to tables of their own, named `L2S_TEST_*`, in the configured
-  schema and drop them afterwards. This is what closes the gaps listed above.
+### Live tests
+
+```bash
+pytest -m live tests/live
+```
+
+reads a real Langfuse project to prove that the API still accepts what the
+client sends: paths, parameters, field groups, the filters sent along, the
+lighter requests used for reconciling. Read-only. The keys come from the
+environment or from `.env`; without any, the tests are skipped. Live tests
+never run unless asked for.
 
 ### On GitHub
 
 | Workflow | When | What it does |
 | --- | --- | --- |
 | `CI` | every push and pull request | Lint, the unit tests on Python 3.11 and 3.12, and a build of the container image that is then started to check it refuses to run without an access key or without its saved settings, serves the web app and reads keys from secret files. Needs no secrets. |
-| `Live tests` | pushes to `main`, weekly, and on demand | The live tests, in one job per service. |
+| `Live tests` | pushes to `main`, weekly, and on demand | The live tests against the Langfuse test project. |
 
-The live workflow reads repository secrets (Settings, Secrets and variables,
-Actions):
-
-| Job | Secrets |
-| --- | --- |
-| Langfuse | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` |
-| Snowflake | `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY` (the PEM), `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`, and optionally `SNOWFLAKE_ROLE` and `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` |
-
-Until the Snowflake secrets are set, that job says so and passes without
-running anything. A run takes a few minutes of the smallest warehouse.
+The live workflow needs three repository secrets (Settings, Secrets and
+variables, Actions): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
+`LANGFUSE_BASE_URL`. Nothing on GitHub runs against Snowflake.

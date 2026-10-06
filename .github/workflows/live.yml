@@ -1,22 +1,15 @@
 name: Live tests
 
-# Tests against the real services, with the credentials kept as repository
-# secrets. Secrets are not available to pull requests from forks, so this never
-# runs on those.
+# Reads the real Langfuse test project to prove that the API still accepts what
+# the client sends. Read-only. Needs these repository secrets:
 #
-# Langfuse (read-only):
 #   LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
 #   LANGFUSE_BASE_URL      e.g. https://us.cloud.langfuse.com
 #
-# Snowflake (writes to tables of its own, named L2S_TEST_*, and drops them):
-#   SNOWFLAKE_ACCOUNT      e.g. myorg-myaccount
-#   SNOWFLAKE_USER
-#   SNOWFLAKE_PRIVATE_KEY  the PEM of the user's key pair
-#   SNOWFLAKE_WAREHOUSE, SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA
-#   SNOWFLAKE_ROLE, SNOWFLAKE_PRIVATE_KEY_PASSPHRASE   optional
+# Secrets are not available to pull requests from forks, so this never runs on those.
 #
-# Until the Snowflake secrets are set, that job says so and passes without
-# running anything.
+# Nothing here runs against Snowflake: there is no account to run it on. The
+# adapter is tested on Snowpark's local emulator, in the CI workflow.
 
 on:
   push:
@@ -56,40 +49,3 @@ jobs:
           fi
       - name: Live tests
         run: pytest -m live tests/live -v
-
-  snowflake:
-    name: Snowflake
-    runs-on: ubuntu-latest
-    env:
-      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-      SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
-      SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE }}
-      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-      SNOWFLAKE_SCHEMA: ${{ secrets.SNOWFLAKE_SCHEMA }}
-    steps:
-      - name: Check that the secrets are set
-        id: account
-        run: |
-          if [ -z "$SNOWFLAKE_ACCOUNT" ] || [ -z "$SNOWFLAKE_USER" ] || [ -z "$SNOWFLAKE_PRIVATE_KEY" ]; then
-            echo "::notice::No Snowflake secrets are set, so nothing was run against Snowflake."
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "configured=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v5
-        if: steps.account.outputs.configured == 'true'
-      - uses: actions/setup-python@v6
-        if: steps.account.outputs.configured == 'true'
-        with:
-          python-version: "3.12"
-          cache: pip
-      - if: steps.account.outputs.configured == 'true'
-        run: pip install -e ".[dev]"
-      # The same tests the emulator runs on every push, now on Snowflake itself,
-      # plus the views, which only Snowflake can run.
-      - name: Live tests
-        if: steps.account.outputs.configured == 'true'
-        run: pytest -m live tests/snowflake -v
