@@ -79,27 +79,37 @@ docker compose run --rm langfuse-to-snowflake check
 
 ## The web app
 
-One page, served by the service itself at `/`. With several projects, a
-switcher at the top chooses which one the page is about; every setting below
-is kept per project.
+One page, served by the service itself at `/`, in four views. With several
+projects, a switcher at the top chooses which one the page is about;
+everything on it is per project.
 
-- **Status:** every table and view, how far each is synced and when it was last
-  reconciled, with buttons to sync or reconcile now.
-- **What gets synced:** entities, a filter builder, sampling, how often to sync
-  and to re-check loaded data.
-- **Fields to leave out:** "Look at recent data" reads the project's newest
-  records from Langfuse and lists every field in them, nested ones included,
-  with its type and how often it has a value. Untick a field and it is
-  removed from every record before loading. Because it reads what the project
-  logs right now, it keeps up as projects add or drop fields.
-- **Earlier versions:** every saved change to the settings, newest first.
-- **Recent runs** and what each one read, added, updated or found deleted.
-  A run that was under way when the service stopped shows as interrupted.
-- **Deployment:** where it reads from and writes to, for orientation. Not editable.
+- **Overview:** how the project stands, in a line: up to date, behind
+  schedule, the last sync failed, nothing synced yet. With it the last and
+  the next sync, the last reconcile and what is loaded. "Sync now" and
+  "Reconcile" start a run, which is then shown entity by entity as it reads.
+  Below that, every table and view in Snowflake, how far each is synced and
+  when it was last reconciled, and the latest runs.
+- **Settings:** what to sync, a filter builder, fields to leave out, sampling,
+  which observation content to load, and the schedule. Changes are counted in
+  a bar at the foot of the page until they are saved or discarded. They are
+  checked before they are saved, apply from the next run, and are marked
+  "Modified" where they differ from the deployment's defaults.
+  - **Fields to leave out:** "Browse recent data" reads the project's newest
+    records from Langfuse and lists every field in them, nested ones included,
+    with its type and how often it has a value. Untick a field and it is
+    removed from every record before loading. Because it reads what the
+    project logs right now, it keeps up as projects add or drop fields.
+  - **History:** every saved version of the settings, newest first, and
+    "Reset to defaults", which drops them all.
+- **Runs:** every sync and reconcile, with how it ended, how long it took and
+  what it read, added and updated. A run opens to the same per entity, with
+  the range it covered, what the filters kept out, and the error if it
+  failed. A run that was under way when the service stopped shows as
+  interrupted. Each run has an address of its own, `#runs/<id>`, to pass on.
+- **Deployment:** where it reads from and writes to, for orientation. Not
+  editable.
 
-Changes are checked before they are saved, apply from the next run, and are
-marked "changed" where they differ from the deployment's defaults. "Reset to
-defaults" drops them all.
+The page follows the system's light or dark appearance and fits a phone.
 
 The scheduler is off until someone sets "Sync every N minutes" (or engineering
 sets `SYNC_SCHEDULE_MINUTES`). With it on, the container needs no outside
@@ -492,7 +502,7 @@ Things to know:
   and `sync --from` rewrites any range. To purge a field from history, run
   one of those over it or remove it in Snowflake.
 - **New fields are loaded unless left out.** When a project starts logging
-  something new, it lands in `RAW` from the next sync. "Look at recent data"
+  something new, it lands in `RAW` from the next sync. "Browse recent data"
   shows what is currently there.
 - **IDs and the record's timestamp cannot be left out**; without them a row
   could not be identified or placed in time.
@@ -618,7 +628,7 @@ src/langfuse_to_snowflake/
     selection/   filters and trace-level sampling
     sync/        the sync service, reconciliation, result models, the protocols they depend on, and the wiring of a running service
     api/         FastAPI app, routes, schemas, background runs and the scheduler
-    web/         the web app: one static page, no build step
+    web/         the web app: one static page, its styles and script modules; no build step
     cli/         Typer commands
 tests/           mirrors the same folders
 Dockerfile, docker-compose.yml
@@ -644,6 +654,19 @@ faked, and the Snowflake adapter runs for real on
 in process. Loading, merging, change detection, sync state, the settings
 and run tables and whole syncs end to end are all executed there, not
 asserted on as statements.
+
+### Looking at the web app
+
+```bash
+python -m tests.web.preview
+```
+
+serves the web app on made-up data at <http://127.0.0.1:8011>, with no
+Langfuse and no Snowflake. The service is the real one: syncs run through the
+real client, sync service and adapter. Only the two ends are stand-ins.
+Langfuse is answered locally, for two projects that log a trace every few
+minutes up to now, and Snowflake is the emulator, so everything is gone when
+the process ends. It needs the development install (`pip install -e ".[dev]"`).
 
 ### Live tests
 

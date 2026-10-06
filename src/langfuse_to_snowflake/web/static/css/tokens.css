@@ -1,0 +1,75 @@
+/* Colours, type and measures. Everything else is written in terms of these. */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f6f6f3;
+  --surface: #ffffff;
+  --sunken: #f3f3f0;
+  --text: #17181a;
+  --muted: #5f6368;
+  --faint: #9a9da3;
+  --line: #e5e5e0;
+  --line-strong: #cfcfc8;
+
+  /* The one strong button on a page, and the brand mark. */
+  --ink: #17181a;
+  --on-ink: #ffffff;
+  --ink-hover: #2c2e32;
+
+  --accent: #2f4bd8;
+  --accent-soft: #e9edfc;
+
+  --ok: #17794a;
+  --ok-soft: #e3f4ea;
+  --warn: #8a5700;
+  --warn-soft: #fbf0d3;
+  --danger: #b3261e;
+  --danger-soft: #fcebe9;
+
+  --shadow: 0 1px 2px rgb(23 24 26 / 0.05);
+  --shadow-raised: 0 16px 40px rgb(23 24 26 / 0.14), 0 2px 8px rgb(23 24 26 / 0.06);
+
+  --radius: 12px;
+  --radius-control: 8px;
+
+  --sans: "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable Text",
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+
+  --page: 1080px;
+  /* Height of the sticky header, for what scrolls beneath it. */
+  --top: 101px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #0e0f10;
+    --surface: #17181a;
+    --sunken: #1e2023;
+    --text: #ececea;
+    --muted: #a0a3a8;
+    --faint: #6c6f75;
+    --line: #2a2c30;
+    --line-strong: #3c3f44;
+
+    --ink: #ececea;
+    --on-ink: #17181a;
+    --ink-hover: #ffffff;
+
+    --accent: #8ea2ff;
+    --accent-soft: #1c2244;
+
+    --ok: #62d29a;
+    --ok-soft: #12301f;
+    --warn: #efc266;
+    --warn-soft: #33280d;
+    --danger: #ff9086;
+    --danger-soft: #3a1a17;
+
+    --shadow: none;
+    --shadow-raised: 0 16px 40px rgb(0 0 0 / 0.5);
+  }
+}

@@ -107,6 +107,9 @@ class EntityInfo(BaseModel):
     object_name: str
     endpoint: str | None = None
     derived_from: str | None = None
+    # A table Langfuse cannot filter by time: read in full on every sync, which
+    # covers what reconciling does for the others.
+    snapshot: bool = False
 
 
 class EntitiesResponse(BaseModel):

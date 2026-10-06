@@ -95,6 +95,9 @@ jobs:
             sleep 1
           done
           curl --silent --fail http://127.0.0.1:8000/ | grep --quiet "<title>Langfuse to Snowflake</title>"
+          # The page is blank without its scripts and styles, which sit in folders of their own.
+          curl --silent --fail --output /dev/null http://127.0.0.1:8000/ui/js/views/settings/form.js
+          curl --silent --fail --output /dev/null http://127.0.0.1:8000/ui/css/views.css
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8000/config)" = 401
           curl --silent --fail -H "X-API-Key: ci-access-key" http://127.0.0.1:8000/projects
       - name: Container logs

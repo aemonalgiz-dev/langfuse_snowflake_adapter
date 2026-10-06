@@ -1,0 +1,371 @@
+/* The pieces views are built from: header, cards, controls, badges, tables. */
+
+/* ---- Header --------------------------------------------------------------- */
+
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  backdrop-filter: saturate(1.4) blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.top-row { display: flex; align-items: center; gap: 14px; height: 56px; }
+
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.brand:hover { text-decoration: none; }
+.mark {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.mark .icon { width: 18px; height: 18px; stroke-width: 2; }
+.mark.large { width: 44px; height: 44px; border-radius: 12px; }
+.mark.large .icon { width: 26px; height: 26px; }
+
+.picker select { font-weight: 500; padding-top: 5px; padding-bottom: 5px; border-radius: 999px; }
+
+.route {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
+  color: var(--muted);
+  font: 12px var(--mono);
+}
+.route span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route .icon { width: 14px; height: 14px; color: var(--faint); }
+
+.tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tabs a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px 12px;
+  color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 6px 6px 0 0;
+}
+.tabs a:first-child { margin-left: -12px; }
+.tabs a:hover { color: var(--text); text-decoration: none; }
+.tabs a[aria-current] { color: var(--text); }
+.tabs a[aria-current]::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
+}
+
+/* ---- Cards ---------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 22px 24px;
+}
+.card.flush { padding: 0; overflow: hidden; }
+
+.banner { border-radius: 10px; padding: 11px 14px; }
+.banner.warn { background: var(--warn-soft); color: var(--warn); }
+.banner.danger { background: var(--danger-soft); color: var(--danger); }
+
+.empty { padding: 28px 24px; text-align: center; color: var(--muted); }
+.empty-note { color: var(--muted); font-size: 13px; }
+
+/* ---- Buttons -------------------------------------------------------------- */
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  font: 500 14px/1 var(--sans);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, color 0.12s, opacity 0.12s;
+}
+button:disabled { opacity: 0.5; cursor: default; }
+
+button.primary { background: var(--ink); color: var(--on-ink); }
+button.primary:hover:not(:disabled) { background: var(--ink-hover); }
+
+button.secondary { background: var(--surface); color: var(--text); border-color: var(--line-strong); }
+button.secondary:hover:not(:disabled) { background: var(--sunken); }
+
+button.danger { background: var(--danger); color: var(--surface); }
+
+button.quiet { background: transparent; color: var(--muted); padding: 0 8px; height: 30px; font-size: 13px; }
+button.quiet:hover { color: var(--text); background: var(--sunken); }
+
+button.small { height: 32px; padding: 0 11px; font-size: 13px; }
+
+button.remove {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  color: var(--faint);
+  border-radius: 6px;
+}
+button.remove:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* ---- Inputs --------------------------------------------------------------- */
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="search"],
+select {
+  height: 36px;
+  min-width: 0;
+  padding: 0 11px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  font: 14px var(--sans);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+select { padding-right: 28px; }
+input::placeholder { color: var(--faint); }
+input:hover,
+select:hover { border-color: var(--faint); }
+input[type="text"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="password"]:focus-visible,
+input[type="search"]:focus-visible,
+select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  border-radius: var(--radius-control);
+}
+input[type="number"] { width: 92px; }
+input[type="checkbox"],
+input[type="range"] { accent-color: var(--ink); }
+input[type="checkbox"] { width: 16px; height: 16px; margin: 0; flex: none; }
+
+.field { display: grid; gap: 6px; align-content: start; }
+.field > input[type="text"] { width: 100%; }
+.label { font-weight: 500; }
+.hint { color: var(--muted); font-size: 13px; }
+.error { display: block; color: var(--danger); font-size: 13px; }
+.unit { display: flex; align-items: center; gap: 9px; color: var(--muted); }
+
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.search { position: relative; display: block; }
+.search .icon { position: absolute; left: 10px; top: 10px; color: var(--faint); pointer-events: none; }
+.search input { width: 100%; padding-left: 32px; }
+
+/* A checkbox drawn as a switch. */
+.switch { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.switch > span { display: grid; gap: 2px; }
+.switch input {
+  appearance: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.switch input::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  transition: transform 0.15s;
+}
+.switch input:checked { background: var(--ink); }
+.switch input:checked::after { transform: translateX(14px); background: var(--on-ink); }
+
+/* A checkbox as a whole card to pick. */
+.options { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 10px; }
+.option {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 12px 40px 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+.option:hover { border-color: var(--line-strong); }
+.option input { position: absolute; top: 13px; right: 13px; }
+.option:has(input:not(:checked)) { background: var(--sunken); border-color: transparent; }
+.option:has(input:not(:checked)) .option-name { color: var(--muted); }
+.option:has(input:disabled) { cursor: default; }
+.option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.option input:focus-visible { outline: none; }
+.option-name { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.option .hint { font-size: 12.5px; line-height: 1.45; }
+
+.segmented { display: inline-flex; gap: 2px; padding: 3px; background: var(--sunken); border-radius: 9px; max-width: 100%; overflow-x: auto; }
+.segmented button { height: 28px; padding: 0 10px; background: transparent; color: var(--muted); font-size: 13px; border-radius: 6px; }
+.segmented button:hover { color: var(--text); }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(0 0 0 / 0.12); }
+.segmented .count { color: var(--faint); font-variant-numeric: tabular-nums; }
+
+/* ---- Small marks ---------------------------------------------------------- */
+
+.tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  vertical-align: 1px;
+  cursor: help;
+}
+
+.pill {
+  display: inline-block;
+  padding: 1px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); }
+.dot.ok { background: var(--ok); }
+.dot.warn { background: var(--warn); }
+.dot.danger { background: var(--danger); }
+.dot.none { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--sunken);
+  color: var(--muted);
+}
+.badge .icon { width: 14px; height: 14px; }
+.badge.succeeded { background: var(--ok-soft); color: var(--ok); }
+.badge.failed { background: var(--danger-soft); color: var(--danger); }
+.badge.interrupted { background: var(--warn-soft); color: var(--warn); }
+.badge.running,
+.badge.queued { background: var(--accent-soft); color: var(--accent); }
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+.spinner.small { width: 11px; height: 11px; border-width: 1.5px; color: var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Tables --------------------------------------------------------------- */
+
+table { width: 100%; border-collapse: collapse; }
+th,
+td { padding: 11px 16px; text-align: left; vertical-align: middle; border-bottom: 1px solid var(--line); }
+th {
+  padding-top: 9px;
+  padding-bottom: 9px;
+  background: var(--sunken);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+th:first-child,
+td:first-child { padding-left: 24px; }
+th:last-child,
+td:last-child { padding-right: 24px; }
+tbody tr:last-child td { border-bottom: 0; }
+td.num,
+th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.quiet { color: var(--muted); }
+td.zero { color: var(--faint); }
+
+/* ---- Toasts and dialogs --------------------------------------------------- */
+
+.toasts { position: fixed; top: calc(var(--top) + 16px); right: 20px; z-index: 40; display: grid; gap: 8px; justify-items: end; pointer-events: none; }
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 11px 14px;
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--on-ink);
+  box-shadow: var(--shadow-raised);
+  pointer-events: auto;
+  animation: drop 0.18s ease-out;
+}
+.toast .icon { margin-top: 3px; }
+.toast.leaving { opacity: 0; transform: translateY(-4px); transition: opacity 0.2s, transform 0.2s; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes drop { from { opacity: 0; transform: translateY(-8px); } }
+
+.dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-raised);
+}
+.dialog::backdrop { background: rgb(10 10 12 / 0.45); backdrop-filter: blur(2px); }
+.dialog form { display: grid; gap: 8px; padding: 22px 24px 20px; }
+.dialog h2 { font-size: 16px; letter-spacing: -0.01em; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+@media (max-width: 760px) {
+  .route { display: none; }
+  .top-row { gap: 10px; }
+  #forget-key { margin-left: auto; }
+  .card { padding: 18px 16px; }
+  th:first-child,
+  td:first-child { padding-left: 16px; }
+  th:last-child,
+  td:last-child { padding-right: 16px; }
+}
+
+@media (max-width: 480px) {
+  .brand h1 { display: none; }
+}

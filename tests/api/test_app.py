@@ -277,9 +277,16 @@ def test_entities_describe_tables_views_and_the_configured_selection(settings, b
         "object_name": "LANGFUSE_OBSERVATIONS",
         "endpoint": "/api/public/v2/observations",
         "derived_from": None,
+        "snapshot": False,
     }
     assert by_name["traces"]["kind"] == "view"
     assert by_name["traces"]["derived_from"] == "observations"
+    # Langfuse cannot filter these by time, so every sync reads them in full.
+    assert {name for name, entity in by_name.items() if entity["snapshot"]} == {
+        "comments",
+        "annotation_queues",
+        "annotation_queue_items",
+    }
 
 
 def test_api_key_is_enforced_when_configured(settings, backend):

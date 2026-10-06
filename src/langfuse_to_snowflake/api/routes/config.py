@@ -181,6 +181,7 @@ def entities(project: ProjectDep) -> EntitiesResponse:
             kind="table",
             object_name=table_name(prefix, extract.spec.name),
             endpoint=extract.endpoint.path,
+            snapshot=not extract.endpoint.windowed,
         )
         for extract in plan.extracts
     ]

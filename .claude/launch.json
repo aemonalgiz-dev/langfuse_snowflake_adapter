@@ -6,6 +6,12 @@
       "runtimeExecutable": ".venv/Scripts/python.exe",
       "runtimeArgs": ["-m", "langfuse_to_snowflake", "serve"],
       "port": 8000
+    },
+    {
+      "name": "preview",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "tests.web.preview"],
+      "port": 8011
     }
   ]
 }
