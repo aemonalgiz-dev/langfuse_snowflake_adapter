@@ -645,41 +645,6 @@ in process. Loading, merging, change detection, sync state, the settings
 and run tables and whole syncs end to end are all executed there, not
 asserted on as statements.
 
-### What has never run on Snowflake
-
-The emulator is the only Snowflake this project has been tested on. **Nothing
-here has been executed against a real Snowflake account.** The emulator covers
-the logic; these it cannot:
-
-- **It runs no SQL.** The three things written as SQL are replaced by a
-  stand-in in the tests: telling a table from a view, adding a column to an
-  existing table, and defining the traces and sessions views. The views are
-  only checked to parse as Snowflake SQL and to read columns that exist.
-- **How rows travel to Snowflake.** The emulator takes them in memory; the
-  upload itself only happens against a real account.
-- **Snowflake's own behaviour**: privileges, type coercion at the edges, limits.
-
-The first deployment is therefore also the first real test. Point it at a
-schema that holds nothing else and go one step at a time:
-
-1. `langfuse-to-snowflake check` logs in and shows the session it got.
-2. `langfuse-to-snowflake init` creates the tables and the two views, which
-   runs the SQL the emulator could not.
-3. `langfuse-to-snowflake sync --from <yesterday>` loads a small range.
-   Then look at `LANGFUSE_OBSERVATIONS` and at the `LANGFUSE_TRACES` view.
-
-With an account at hand, the adapter's own tests can be run on it too:
-
-```bash
-pytest -m live tests/snowflake
-```
-
-They take `SNOWFLAKE_*` from the environment or `.env`, write to tables of
-their own named `L2S_TEST_*` in the configured schema, and drop them
-afterwards. They are the tests the emulator runs, plus one of what the views
-return. They have never been run either, so a failure there may be the
-adapter's or the test's.
-
 ### Live tests
 
 ```bash
@@ -692,6 +657,14 @@ lighter requests used for reconciling. Read-only. The keys come from the
 environment or from `.env`; without any, the tests are skipped. Live tests
 never run unless asked for.
 
+```bash
+pytest -m live tests/snowflake
+```
+
+runs the adapter's tests on a Snowflake account instead of the emulator. They
+take `SNOWFLAKE_*` from the environment or `.env`, write to tables of their
+own named `L2S_TEST_*` in the configured schema, and drop them afterwards.
+
 ### On GitHub
 
 | Workflow | When | What it does |
@@ -701,4 +674,4 @@ never run unless asked for.
 
 The live workflow needs three repository secrets (Settings, Secrets and
 variables, Actions): `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and
-`LANGFUSE_BASE_URL`. Nothing on GitHub runs against Snowflake.
+`LANGFUSE_BASE_URL`. Until they are set it skips the tests and says so.
